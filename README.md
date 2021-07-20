@@ -113,6 +113,24 @@ tar -xvf 9.1.0.6-IBM-MQC-LinuxX64.tar.gz
 ./mqlicense.sh
 rpm -i MQSeriesSDK-9.1.0-6.x86_64.rpm MQSeriesRuntime-9.1.0-6.x86_64.rpm MQSeriesClient-9.1.0-6.x86_64.rpm
 ```
+Если выходит ошибка:
+
+error: %prein(MQSeriesSDK-9.1.0-6.x86_64) scriptlet failed, exit status 255
+error: MQSeriesSDK-9.1.0-6.x86_64: install failed
+
+ERROR:   Use of rpm to install MQSeriesClient on the Ubuntu distribution is no longer supported
+         Installation terminated
+         
+то редактируем файл /usr/bin/uname и приводим к след. виду
+```shell script
+#!/bin/bash
+echo "Linux centos8 4.18.0-305.21.1.el8.x86_64 #1 SMP Wed Mar 7 19:03:37 UTC 2021 x86_64 x86_64 x86_64 GNU/Linux"
+```
+
+и пробуем снова установить MQSeries
+```shell script
+rpm -i MQSeriesSDK-9.1.0-6.x86_64.rpm MQSeriesRuntime-9.1.0-6.x86_64.rpm MQSeriesClient-9.1.0-6.x86_64.rpm
+```
 Скачиваем php-расширение и переходим в папку с расширением:
 ```shell script
 cd /tmp/php_pecl/
