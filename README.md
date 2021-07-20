@@ -106,7 +106,7 @@ pecl install pdo_sqlsrv-5.8.1.tgz
 -
 https://www.php.net/manual/ru/mqseries.configure.php
 
-Устанавливаем клиентские библиотеки MQ (я скачивал с офф. сайта https://IBM.com файл `9.1.0.6-IBM-MQC-LinuxX64.tar.gz`)
+Устанавливаем клиентские библиотеки MQ (я скачивал с офф. сайта IBM (https://www.ibm.com/support/pages/recommended-fixes-ibm-mq) файл `9.1.0.6-IBM-MQC-LinuxX64.tar.gz`)
 Распаковываем архив в папку `/tmp/php_pecl/MQC` и переходим в неё:
 ```shell script
 tar -xvf 9.1.0.6-IBM-MQC-LinuxX64.tar.gz
