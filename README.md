@@ -162,3 +162,13 @@ make install
 создаем файл `50-pdo_sqlsrv.ini` со след. содержимым `extension=pdo_sqlsrv.so`  
 создаем файл `50-sqlsrv.ini` со след. содержимым `extension=sqlsrv.so`  
 создаем файл `50-mqseries.ini` со след. содержимым `extension=mqseries.so`
+
+Или скриптом:
+```shell script
+echo "extension=smbclient.so" > /etc/php.d/50-smbclient.ini
+echo "extension=pdo_informix.so" > /etc/php.d/50-pdo_informix.ini
+echo "extension=oci8.so" > /etc/php.d/50-oci8.ini
+echo "extension=pdo_sqlsrv.so" > /etc/php.d/50-pdo_sqlsrv.ini
+echo "extension=sqlsrv.so" > /etc/php.d/50-sqlsrv.ini
+echo "extension=mqseries.so" > /etc/php.d/50-mqseries.ini
+```
