@@ -76,6 +76,12 @@ gpgcheck=0
 ```shell script
 yum install oracle-instantclient19.6-basic oracle-instantclient19.6-devel libnsl
 ```
+Я скачивал с сайта Oracle (https://www.oracle.com/database/technologies/instant-client/downloads.html) 
+и устанавливал их через:
+```shell script
+yum install libnsl libaio
+rpm -i /home/oracle-instantclient19.11-basic-19.11.0.0.0-1.x86_64.rpm /home/oracle-instantclient19.11-devel-19.11.0.0.0-1.x86_64.rpm
+```
 Скачиваем oci8 (необходимо использовать именно эту версию `2.2.0` т.к. версии выше этой не работают с php7.2):
 ```shell script
 pecl install oci8-2.2.0.tgz
