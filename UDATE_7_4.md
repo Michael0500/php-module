@@ -23,5 +23,10 @@ yum install php php-mysqlnd php-bcmath php-devel php-gd php-intl php-json php-ld
 ```
 Удаляем модули которые были в php 7.2 и ставим их по новой:
 ```shell script
-rm
+rm /etc/php.d/50-mqseries.ini
+rm /etc/php.d/50-oci8.ini
+rm /etc/php.d/50-pdo_informix.ini'
+rm /etc/php.d/50-pdo_sqlsrv.ini
+rm /etc/php.d/50-smbclient.ini
+rm /etc/php.d/50-sqlsrv.ini
 ```
