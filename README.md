@@ -119,9 +119,9 @@ https://www.php.net/manual/ru/mqseries.configure.php
 ```shell script
 mkdir -p /tmp/php_pecl/MQC
 cd /tmp/php_pecl/MQC
-tar -xvf 9.1.0.6-IBM-MQC-LinuxX64.tar.gz
+tar -xvf /home/9.1.0.6-IBM-MQC-LinuxX64.tar.gz
 ./mqlicense.sh
-rpm -i /home/MQSeriesSDK-9.1.0-6.x86_64.rpm /home/MQSeriesRuntime-9.1.0-6.x86_64.rpm /home/MQSeriesClient-9.1.0-6.x86_64.rpm
+rpm -i MQSeriesSDK-9.1.0-6.x86_64.rpm MQSeriesRuntime-9.1.0-6.x86_64.rpm MQSeriesClient-9.1.0-6.x86_64.rpm
 ```
 Если выходит ошибка:
 
