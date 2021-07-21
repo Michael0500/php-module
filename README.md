@@ -45,7 +45,7 @@ yum install ncurses-compat-libs
 ```shell script
 mkdir -p /tmp/php_pecl/InformixClientSDK/
 cd /tmp/php_pecl/InformixClientSDK/
-tar -xvf ibm.csdk.4.50.FC5.LNX.tar
+tar -xvf /home/ibm.csdk.4.50.FC5.LNX.tar
 ./installclientsdk
 ```
 SDK для клиента должна установиться в директорию `/opt/IBM/Informix_Client-SDK`
