@@ -29,4 +29,6 @@ rm /etc/php.d/50-pdo_informix.ini'
 rm /etc/php.d/50-pdo_sqlsrv.ini
 rm /etc/php.d/50-smbclient.ini
 rm /etc/php.d/50-sqlsrv.ini
+
+rm /etc/php.d/40-zip.ini
 ```
