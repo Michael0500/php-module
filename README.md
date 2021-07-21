@@ -8,7 +8,7 @@ yum update
 
 Устанавливаем php и библиотеки доступные в репозитории:
 ```shell script
-yum install php php-mysqlnd php-bcmath php-devel php-gd php-intl php-json php-ldap php-ldap php-mbstring php-odbc php-pgsql php-xml php-xmlrpc php-soap php-dba php-pecl-zip php-gmp php-opcache php-pecl-apcu php-pear
+yum install php php-mysqlnd php-bcmath php-devel php-gd php-intl php-json php-ldap php-mbstring php-odbc php-pgsql php-xml php-xmlrpc php-soap php-dba php-pecl-zip php-gmp php-opcache php-pecl-apcu php-pear
 ```
 
 Библиотека smbclient:
