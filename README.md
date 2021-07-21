@@ -52,6 +52,7 @@ SDK для клиента должна установиться в директ�
 
 Скачиваем PDO_INFORMIX:
 ```shell script
+cd /tmp/php_pecl
 curl https://pecl.php.net/get/PDO_INFORMIX-1.3.4.tgz --output PDO_INFORMIX-1.3.4.tgz
 # Распаковываем архив:
 tar -zxvf PDO_INFORMIX-1.3.4.tgz
