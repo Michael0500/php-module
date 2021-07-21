@@ -43,7 +43,9 @@ yum install ncurses-compat-libs
 ```
 Скачиваем Informix Client SDK с сайта IBM https://www.ibm.com/products/informix/developer-tools (я использовал версию ibm.csdk.4.50.FC5.LNX.tar) распаковываем архив и переходим в эту папку
 ```shell script
+mkdir -p /tmp/php_pecl/InformixClientSDK/
 cd /tmp/php_pecl/InformixClientSDK/
+tar -xvf ibm.csdk.4.50.FC5.LNX.tar
 ./installclientsdk
 ```
 SDK для клиента должна установиться в директорию `/opt/IBM/Informix_Client-SDK`
