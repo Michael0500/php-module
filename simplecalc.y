@@ -1,5 +1,11 @@
 %{
 // Простой калькулятор целых чисел
+
+// Сборка:
+// bison rpcalc.y
+// gcc rpcalc.tab.c --std=c99 -Wall -o rpcalc.exe
+// rpcalc.exe
+
 #include <stdio.h>
 
 int yylex(void);
