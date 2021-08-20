@@ -2,9 +2,9 @@
 // Простой калькулятор целых чисел
 
 // Сборка:
-// bison rpcalc.y
-// gcc rpcalc.tab.c --std=c99 -Wall -o rpcalc.exe
-// rpcalc.exe
+// bison simplecalc.y
+// gcc simplecalc.tab.c --std=c99 -Wall -o simplecalc.exe
+// simplecalc.exe
 
 #include <stdio.h>
 
