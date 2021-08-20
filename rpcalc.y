@@ -19,18 +19,18 @@ void yyerror(const char *s);
 %%
 
 input:	/* ---- */
-     	| input line
+	| input line
 ;
 
 line:	'\n'
-    	| exp '\n' 		{ printf("\t%.3f\n", $1); } 
+	| exp '\n'	{ printf("\t%.3f\n", $1); } 
 ;
 
-exp:	NUM 			{ $$ = $1; }
-		| exp exp '+' 	{ $$ = $1 + $2; }
-		| exp exp '-' 	{ $$ = $1 - $2; }
-		| exp exp '*' 	{ $$ = $1 * $2; }
-		| exp exp '/' 	{ $$ = $1 / $2; }
+exp:	NUM		{ $$ = $1; }
+	| exp exp '+' 	{ $$ = $1 + $2; }
+	| exp exp '-' 	{ $$ = $1 - $2; }
+	| exp exp '*' 	{ $$ = $1 * $2; }
+	| exp exp '/' 	{ $$ = $1 / $2; }
 ;
 
 %%
