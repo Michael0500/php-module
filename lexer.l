@@ -10,6 +10,7 @@ EXPONENT_DNUM	(({LNUM}|{DNUM})[eE][+-]?{LNUM})
 HNUM	"0x"[0-9a-fA-F]+(_[0-9a-fA-F]+)*
 BNUM	"0b"[01]+(_[01]+)*
 ONUM	"0o"[0-7]+(_[0-7]+)*
+VARIABLE	"$"[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*
 LABEL	[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*
 WHITESPACE [ \n\r\t]+
 TABS_AND_SPACES [ \t]*
@@ -28,6 +29,7 @@ NEWLINE ("\r"|"\n"|"\r\n")
 {HNUM}				{ printf("HNUM(%s)", yytext); }
 {BNUM}				{ printf("BNUM(%s)", yytext); }
 {ONUM}				{ printf("ONUM(%s)", yytext); }
+{VARIABLE}			{ printf("VARIABLE(%s)", yytext); }
 {LABEL}				{ printf("LABEL(%s)", yytext); }
 "/*"				{ BEGIN(S_COMMENT); printf("/* COMMENT_BEGIN"); }
 
@@ -36,11 +38,11 @@ NEWLINE ("\r"|"\n"|"\r\n")
 .					;
 }
 
-"\""				{ BEGIN(S_STRING); }
+"\""				{ BEGIN(S_STRING); printf("STRING(\""); }
 
 <S_STRING>{
-"\""				BEGIN(INITIAL);
-[^\"]+				{ printf("STRING(%s)", yytext); }
+"\""				{ BEGIN(INITIAL); printf("\")"); }
+[^"]*				{ printf("%s", yytext); }
 }
 
 %%
