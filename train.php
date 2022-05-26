@@ -1,12 +1,14 @@
 <?php
 
+/**
+ * Круговой (замкнутый) поезд
+ */
 class CircleList {
-    private array $data; // элементы
-    private int $index; // индекс текущего просматриваемого элемента
-    private int $length; // количество элементов
+    private array $data; // вагоны
+    private int $index; // индекс текущего просматриваемого вагона
+    private int $length; // количество вагонов
 
     /**
-     * CircleList constructor.
      * @param array $data
      * @throws Exception
      */
@@ -21,152 +23,83 @@ class CircleList {
         $this->data = $data;
     }
 
+    /**
+     * Текущий вагон
+     * @return bool
+     */
     public function current(): bool {
-        $result = $this->data[$this->index];
-
-        echo 'index: ' . $this->index . ' value: ' . $result . PHP_EOL;
-
-        return $result;
+        return $this->data[$this->index];
     }
 
+    /**
+     * Переходит в следующий вагон
+     * @return bool
+     */
     public function next(): bool {
-        if (++$this->index > $this->length - 1) {
-            $this->index = $this->index - $this->length;
+        $this->index++;
+        if ($this->index > $this->length - 1) {
+            $this->index = 0;
         }
 
-        $result = $this->data[$this->index];
-
-        //echo 'index: ' . $this->index . ' value: ' . $result . PHP_EOL;
-
-        return $result;
+        return $this->data[$this->index];
     }
 
+    /**
+     * Переходит в предыдущий вагон
+     * @return bool
+     */
     public function prev(): bool {
-        if (--$this->index < 0) {
+        $this->index--;
+        if ($this->index < 0) {
             $this->index = $this->length - 1;
         }
 
-        $result = $this->data[$this->index];
-
-        //echo 'index: ' . $this->index . ' value: ' . $result . PHP_EOL;
-
-
-        return $result;
+        return $this->data[$this->index];
     }
 
-    public function getIndex(): int {
-        return $this->index;
-    }
-
+    /**
+     * Выключить свет в текущем вагоне
+     */
     public function off() {
         $this->data[$this->index] = false;
     }
 
+    /**
+     * Включить свет в текущем вагоне
+     */
     public function on() {
         $this->data[$this->index] = true;
     }
-
-    public function toggle() {
-        $this->data[$this->index] = !$this->data[$this->index];
-    }
 }
 
-
-$arr = [false, false, true, true, false, false, true, false, true, true, true];
-//$arr = [false, false, true];
+// Массив с вагонами (true - свет в вагоне включен, false - свет в вагоне выключен)
+$arr = [true, false, true, true, true, false, true, false, false, true];
 $train = new CircleList($arr);
 
-//$i=0;
-//while (true) {
-//    echo 'i: ' . $i . ' ';
-//    $train->current();
-//    $train->next();
-//    if (++$i > 10) break;
-//}
-//
-//echo PHP_EOL;
-//
-//$i=0;
-//while (true) {
-//    echo 'i: ' . $i . ' ';
-//    $train->current();
-//    $train->prev();
-//    if (++$i > 10) break;
-//}
-//var_dump($train);
-//exit;
-
-
-$train->on(true); // включаем свет в первом вагоне
+$train->on(); // включаем свет в первом вагоне
 $length = 1;
-echo PHP_EOL;
 
 while (true) {
-    $train->next();
-    $length++;
+    // Идем вперед пока не встретим вагон с работающим освещением
+    while (!$train->next()) {
+        // при этом считаем пройденные вагоны
+        $length++;
+    }
+    // выключаем в найденном вагоне свет
+    $train->off();
+
+    // и идём обратно к начальному вагону
+    for ($i = 0; $i < $length; $i++) {
+        $train->prev();
+    }
+
     if (true === $train->current()) {
-        $train->off();
-        for ($i=0; $i<$length; $i++) {
-            $train->prev();
-        }
-
-        if (true === $train->current()) {
-            continue;
-        } else {
-            break;
-        }
+        // если в нём свет горит, то повторяем операцию
+        $length=1;
+    } else {
+        // если свет не горит, значит мы прошли полный круг и знаем длину поезда
+       break;
     }
 }
 
-var_dump($train);
-var_dump($length);
-exit;
-
-
-
-
-
-for ($i = 1; $i<=3; $i++) {
-    $s = $train->current();
-    var_dump($s);
-    var_dump($train->getIndex());
-    $train->next();
-}
-
-echo PHP_EOL;
-
-for ($i = 1; $i<=10; $i++) {
-    $s = $train->current();
-    var_dump($s);
-    var_dump($train->getIndedx());
-    $train->prev();
-}
-
-
-
-exit;
-
-// Заполняем вагоны случайными значениями (вкл/выкл свет)
-function generationLightList(SplDoublyLinkedList $list) {
-    $length = rand(1, 10);
-
-    for ($i=0; $i<$length; $i++) {
-        $list->add($i, rand(0, 1));
-    }
-}
-
-
-// Поезд
-$train = new SplDoublyLinkedList();
-generationLightList($train);
-var_dump($train);
-
-// Нужно включить свет в начальном вагоне, сли он ещё не горит
-$i = 0;
-if ('0' === $train[$i]) {
-    $train[$i] = 1;
-}
-
-foreach ($train as $item) {
-
-}
+echo 'Длина поезда: ' . $length . PHP_EOL;
