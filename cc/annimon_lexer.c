@@ -62,6 +62,7 @@ void lex_setText(struct Token *token, char *text) {
 
 //-----------------------------------------------------------------------------
 #define TOKEN_LEN 1000
+#define MAX_LEN 255
 
 struct Lexer {
 	char *input;
@@ -100,8 +101,10 @@ struct Token *lex_tokenize(struct Lexer *lexer) {
 
 static void lex_tokenizeNumber(struct Lexer *lexer) {
 	char current = lex_peek(lexer, 0);
-	char buffer[255];
+	char *buffer;
 	int i = 0;
+	
+	buffer = (char *) malloc(sizeof(char) * MAX_LEN);
 	
 	while (isdigit(current)) {
 		buffer[i] = current;
@@ -118,7 +121,10 @@ static void lex_tokenizeNumber(struct Lexer *lexer) {
 static void lex_tokenizeOperator(struct Lexer *lexer) {
 	const char current = lex_peek(lexer, 0);
 	enum TokenType type;
-	char buffer[2];
+	char *buffer;
+	
+	buffer = (char *) malloc(sizeof(char) * MAX_LEN);
+	
 	buffer[0] = current;
 	buffer[1] = '\0';
 	
