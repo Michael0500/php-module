@@ -13,3 +13,25 @@
         return open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
+
+
+
+// Код ниже выполняет аналогичную задачу
+var original = {
+    send: XMLHttpRequest.prototype.send
+};
+
+XMLHttpRequest.prototype.send = function (data) {
+    let response = original.send.call(this, data);
+
+    // Делаем проверку на определенный урл
+    if (this.responseURL === 'https://mysite.com/custom-url') {
+        Object.defineProperty(this, 'responseText', {writable: true});
+        Object.defineProperty(this, 'response', {writable: true});
+        // Тут происходит подмена ответа
+        this.responseText = '<div id="myid">22222</div>';
+        this.response = '<div id="myid">22222</div>';
+    }
+
+    return response;
+};
