@@ -37,5 +37,6 @@ Password: 12345
 
 Параметры подключения к БД. (mysql):
 Host: 192.168.0.103
+Dbname: example
 Username: dbarslan
 Password: 12345
