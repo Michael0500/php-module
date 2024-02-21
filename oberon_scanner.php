@@ -168,32 +168,135 @@ class ORS
         $ident = $this->id;
     }
 
-    private function Identifier(int &$sym)
+    public function Get(int &$sym)
     {
-        $i = 0;
         do {
-            if ($i < self::IdLen - 1) {
-                $this->id[$i] = $this->ch;
-                $i++;
+            while (!$this->R->eot && ($this->ch <= " ")) {
+                Texts::Read($this->R, $this->ch);
             }
-            Texts::Read($this->R, $this->ch);
-        } while (($this->ch < "0") or ($this->ch > "9") & ($this->ch < "A") or ($this->ch > "Z") & ($this->ch < "a") or ($this->ch > "z"));
-
-        $this->id[$i] = "\0";
-        if ($i < 10) {
-            $k = $this->KWX[$i - 1]; // search for keyword
-            while (($this->id != $this->keyTab[$k]['id']) && ($k < $this->KWX[$i])) {
-                $k++;
-            }
-
-            if ($k < $this->KWX[$i]) {
-                $sym = $this->keyTab[$k]['sym'];
+            if ($this->R->eot) {
+                $sym = self::T_eot;
+            } elseif ($this->ch < "A") {
+                if ($this->ch < "0") {
+                    if ($this->ch === "\"") {
+                        $this->String();
+                        $sym = self::T_string;
+                    } elseif ($this->ch === "#") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_neq;
+                    } elseif ($this->ch === "$") {
+                        $this->HexString();
+                        $sym = self::T_string;
+                    } elseif ($this->ch === "&") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_and;
+                    } elseif ($this->ch === "(") {
+                        Texts::Read($this->R, $this->ch);
+                        if ($this->ch === "*") {
+                            $sym = self::T_null;
+                            $this->comment();
+                        } else {
+                            $sym = self::T_lparen;
+                        }
+                    } elseif ($this->ch === ")") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_rparen;
+                    } elseif ($this->ch === "*") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_times;
+                    } elseif ($this->ch === "+") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_plus;
+                    } elseif ($this->ch === ",") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_comma;
+                    } elseif ($this->ch === "-") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_minus;
+                    } elseif ($this->ch === ".") {
+                        Texts::Read($this->R, $this->ch);
+                        if ($this->ch === ".") {
+                            Texts::Read($this->R, $this->ch);
+                            $sym = self::T_upto;
+                        } else {
+                            $sym = self::T_period;
+                        }
+                    } elseif ($this->ch === "/") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_rdiv;
+                    } else {
+                        /* ! % ' */
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_null;
+                    }
+                } elseif ($this->ch < ":") {
+                    $this->Number($sym);
+                } elseif ($this->ch === ":") {
+                    Texts::Read($this->R, $this->ch);
+                    if ($this->ch === "=") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_becomes;
+                    } else {
+                        $sym = self::T_colon;
+                    }
+                } elseif ($this->ch === ";") {
+                    Texts::Read($this->R, $this->ch);
+                    $sym = self::T_semicolon;
+                } elseif ($this->ch === "<") {
+                    Texts::Read($this->R, $this->ch);
+                    if ($this->ch === "=") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_leq;
+                    } else {
+                        $sym = self::T_lss;
+                    }
+                } elseif ($this->ch === "=") {
+                    Texts::Read($this->R, $this->ch);
+                    $sym = self::T_eql;
+                } elseif ($this->ch === ">") {
+                    Texts::Read($this->R, $this->ch);
+                    if ($this->ch === "=") {
+                        Texts::Read($this->R, $this->ch);
+                        $sym = self::T_geq;
+                    } else {
+                        $sym = self::T_gtr;
+                    }
+                } else { /* ? @ */
+                    Texts::Read($this->R, $this->ch);
+                    $sym = self::T_null;
+                }
+            } elseif ($this->ch < "[") {
+                $this->Identifier($sym);
+            } elseif ($this->ch < "a") {
+                if ($this->ch === "[") {
+                    $sym = self::T_lbrak;
+                } elseif ($this->ch === "]") {
+                    $sym = self::T_rbrak;
+                } elseif ($this->ch === "^") {
+                    $sym = self::T_arrow;
+                } else { /* _ ` */
+                    $sym = self::T_null;
+                }
+                Texts::Read($this->R, $this->ch);
+            } elseif ($this->ch < "{") {
+                $this->Identifier($sym);
             } else {
-                $sym = self::T_ident;
+                if ($this->ch === "{") {
+                    $sym = self::T_lbrace;
+                } elseif ($this->ch === "}") {
+                    $sym = self::T_rbrace;
+                } elseif ($this->ch === "|") {
+                    $sym = self::T_bar;
+                } elseif ($this->ch === "~") {
+                    $sym = self::T_not;
+                } elseif (ord($this->ch) === 0x7F) {
+                    $sym = self::T_upto;
+                } else {
+                    $sym = self::T_null;
+                }
+                Texts::Read($this->R, $this->ch);
             }
-        } else {
-            $sym = self::T_ident;
-        }
+        } while ($sym === null);
     }
 
     private function String()
@@ -277,21 +380,6 @@ class ORS
         $this->slen = $i;  // no 0x0 appended!
     }
 
-    private function Ten(int $e): float
-    {
-        $x = 1.0;
-        $t = 10.0;
-        while ($e > 0) {
-            if ($e % 2 !== 0) {
-                $x = $t * $x;
-            }
-            $t = $t * $t;
-            $e = intval($e / 2);
-        }
-
-        return $x;
-    }
-
     private function comment()
     {
         Texts::Read($this->R, $this->ch);
@@ -321,188 +409,191 @@ class ORS
         }
     }
 
-/*
-  PROCEDURE Number(VAR sym: INTEGER);
-    CONST max = 2147483647 (*2^31 - 1*);
-    VAR i, k, e, n, s, h: LONGINT; x: REAL;
-      d: ARRAY 16 OF INTEGER;
-      negE: BOOLEAN;
-  BEGIN ival := 0; i := 0; n := 0; k := 0;
-    REPEAT
-      IF n < 16 THEN d[n] := ORD(ch)-30H; INC(n) ELSE Mark("too many digits"); n := 0 END ;
-      Texts.Read(R, ch)
-    UNTIL (ch < "0") OR (ch > "9") & (ch < "A") OR (ch > "F");
-    IF (ch = "H") OR (ch = "R") OR (ch = "X") THEN  (*hex*)
-      REPEAT h := d[i];
-        IF h >= 10 THEN h := h-7 END ;
-        k := k*10H + h; INC(i) (*no overflow check*)
-      UNTIL i = n;
-      IF ch = "X" THEN sym := char;
-        IF k < 100H THEN ival := k ELSE Mark("illegal value"); ival := 0 END
-      ELSIF ch = "R" THEN sym := real; rval := SYSTEM.VAL(REAL, k)
-      ELSE sym := int; ival := k
-      END ;
-      Texts.Read(R, ch)
-    ELSIF ch = "." THEN
-      Texts.Read(R, ch);
-      IF ch = "." THEN (*double dot*) ch := 7FX;  (*decimal integer*)
-        REPEAT
-          IF d[i] < 10 THEN
-            IF k <= (max-d[i]) DIV 10 THEN k := k *10 + d[i] ELSE Mark("too large"); k := 0 END
-          ELSE Mark("bad integer")
-          END ;
-          INC(i)
-        UNTIL i = n;
-        sym := int; ival := k
-      ELSE (*real number*) x := 0.0; e := 0;
-        REPEAT  (*integer part*) x := x * 10.0 + FLT(d[i]); INC(i) UNTIL i = n;
-        WHILE (ch >= "0") & (ch <= "9") DO  (*fraction*)
-          x := x * 10.0 + FLT(ORD(ch) - 30H); DEC(e); Texts.Read(R, ch)
-        END ;
-        IF (ch = "E") OR (ch = "D") THEN  (*scale factor*)
-          Texts.Read(R, ch); s := 0; 
-          IF ch = "-" THEN negE := TRUE; Texts.Read(R, ch)
-          ELSE negE := FALSE;
-            IF ch = "+" THEN Texts.Read(R, ch) END
-          END ;
-          IF (ch >= "0") & (ch <= "9") THEN
-            REPEAT s := s*10 + ORD(ch)-30H; Texts.Read(R, ch)
-            UNTIL (ch < "0") OR (ch >"9");
-            IF negE THEN e := e-s ELSE e := e+s END
-          ELSE Mark("digit?")
-          END
-        END ;
-        IF e < 0 THEN
-          IF e >= -maxExp THEN x := x / Ten(-e) ELSE x := 0.0 END
-        ELSIF e > 0 THEN
-          IF e <= maxExp THEN x := Ten(e) * x ELSE x := 0.0; Mark("too large") END
-        END ;
-        sym := real; rval := x
-      END
-    ELSE  (*decimal integer*)
-      REPEAT
-        IF d[i] < 10 THEN
-          IF k <= (max-d[i]) DIV 10 THEN k := k*10 + d[i] ELSE Mark("too large"); k := 0 END
-        ELSE Mark("bad integer")
-        END ;
-        INC(i)
-      UNTIL i = n;
-      sym := int; ival := k
-    END
-  END Number;
-*/
-    
-/*    
-  PROCEDURE Get*(VAR sym: INTEGER);
-  BEGIN
-    REPEAT
-      WHILE ~R.eot & (ch <= " ") DO Texts.Read(R, ch) END;
-      IF R.eot THEN sym := eot
-      ELSIF ch < "A" THEN
-        IF ch < "0" THEN
-          IF ch = 22X THEN String; sym := string
-          ELSIF ch = "#" THEN Texts.Read(R, ch); sym := neq
-          ELSIF ch = "$" THEN HexString; sym := string
-          ELSIF ch = "&" THEN Texts.Read(R, ch); sym := and
-          ELSIF ch = "(" THEN Texts.Read(R, ch); 
-            IF ch = "*" THEN sym := null; comment ELSE sym := lparen END
-          ELSIF ch = ")" THEN Texts.Read(R, ch); sym := rparen
-          ELSIF ch = "*" THEN Texts.Read(R, ch); sym := times
-          ELSIF ch = "+" THEN Texts.Read(R, ch); sym := plus
-          ELSIF ch = "," THEN Texts.Read(R, ch); sym := comma
-          ELSIF ch = "-" THEN Texts.Read(R, ch); sym := minus
-          ELSIF ch = "." THEN Texts.Read(R, ch);
-            IF ch = "." THEN Texts.Read(R, ch); sym := upto ELSE sym := period END
-          ELSIF ch = "/" THEN Texts.Read(R, ch); sym := rdiv
-          ELSE Texts.Read(R, ch); (* ! % ' *) sym := null
-          END
-        ELSIF ch < ":" THEN Number(sym)
-        ELSIF ch = ":" THEN Texts.Read(R, ch);
-          IF ch = "=" THEN Texts.Read(R, ch); sym := becomes ELSE sym := colon END 
-        ELSIF ch = ";" THEN Texts.Read(R, ch); sym := semicolon
-        ELSIF ch = "<" THEN  Texts.Read(R, ch);
-          IF ch = "=" THEN Texts.Read(R, ch); sym := leq ELSE sym := lss END
-        ELSIF ch = "=" THEN Texts.Read(R, ch); sym := eql
-        ELSIF ch = ">" THEN Texts.Read(R, ch);
-          IF ch = "=" THEN Texts.Read(R, ch); sym := geq ELSE sym := gtr END
-        ELSE (* ? @ *) Texts.Read(R, ch); sym := null
-        END
-      ELSIF ch < "[" THEN Identifier(sym)
-      ELSIF ch < "a" THEN
-        IF ch = "[" THEN sym := lbrak
-        ELSIF ch = "]" THEN  sym := rbrak
-        ELSIF ch = "^" THEN sym := arrow
-        ELSE (* _ ` *) sym := null
-        END ;
-        Texts.Read(R, ch)
-      ELSIF ch < "{" THEN Identifier(sym) ELSE
-        IF ch = "{" THEN sym := lbrace
-        ELSIF ch = "}" THEN sym := rbrace
-        ELSIF ch = "|" THEN sym := bar
-        ELSIF ch = "~" THEN  sym := not
-        ELSIF ch = 7FX THEN  sym := upto
-        ELSE sym := null
-        END ;
-        Texts.Read(R, ch)
-      END
-    UNTIL sym # null
-  END Get;
-*/  
+    private function Number(int &$sym)
+    {
+        $this->ival = 0;
+        $i = 0;
+        $n = 0;
+        $k = 0;
+        $MAX = 2147483647;
+        $d = [];
 
-/*
-public function Get(int &$sym)
-{
-    do {
-      while (!$this->R->eot && ($this->ch <= " ")) { Texts::Read($this->R, $this->ch); }
-      if R.eot THEN sym := eot
-      ELSIF ch < "A" THEN
-        IF ch < "0" THEN
-          IF ch = 22X THEN String; sym := string
-          ELSIF ch = "#" THEN Texts.Read(R, ch); sym := neq
-          ELSIF ch = "$" THEN HexString; sym := string
-          ELSIF ch = "&" THEN Texts.Read(R, ch); sym := and
-          ELSIF ch = "(" THEN Texts.Read(R, ch); 
-            IF ch = "*" THEN sym := null; comment ELSE sym := lparen END
-          ELSIF ch = ")" THEN Texts.Read(R, ch); sym := rparen
-          ELSIF ch = "*" THEN Texts.Read(R, ch); sym := times
-          ELSIF ch = "+" THEN Texts.Read(R, ch); sym := plus
-          ELSIF ch = "," THEN Texts.Read(R, ch); sym := comma
-          ELSIF ch = "-" THEN Texts.Read(R, ch); sym := minus
-          ELSIF ch = "." THEN Texts.Read(R, ch);
-            IF ch = "." THEN Texts.Read(R, ch); sym := upto ELSE sym := period END
-          ELSIF ch = "/" THEN Texts.Read(R, ch); sym := rdiv
-          ELSE Texts.Read(R, ch); (* ! % ' *) sym := null
-          END
-        ELSIF ch < ":" THEN Number(sym)
-        ELSIF ch = ":" THEN Texts.Read(R, ch);
-          IF ch = "=" THEN Texts.Read(R, ch); sym := becomes ELSE sym := colon END 
-        ELSIF ch = ";" THEN Texts.Read(R, ch); sym := semicolon
-        ELSIF ch = "<" THEN  Texts.Read(R, ch);
-          IF ch = "=" THEN Texts.Read(R, ch); sym := leq ELSE sym := lss END
-        ELSIF ch = "=" THEN Texts.Read(R, ch); sym := eql
-        ELSIF ch = ">" THEN Texts.Read(R, ch);
-          IF ch = "=" THEN Texts.Read(R, ch); sym := geq ELSE sym := gtr END
-        ELSE (* ? @ *) Texts.Read(R, ch); sym := null
-        END
-      ELSIF ch < "[" THEN Identifier(sym)
-      ELSIF ch < "a" THEN
-        IF ch = "[" THEN sym := lbrak
-        ELSIF ch = "]" THEN  sym := rbrak
-        ELSIF ch = "^" THEN sym := arrow
-        ELSE (* _ ` *) sym := null
-        END ;
-        Texts.Read(R, ch)
-      ELSIF ch < "{" THEN Identifier(sym) ELSE
-        IF ch = "{" THEN sym := lbrace
-        ELSIF ch = "}" THEN sym := rbrace
-        ELSIF ch = "|" THEN sym := bar
-        ELSIF ch = "~" THEN  sym := not
-        ELSIF ch = 7FX THEN  sym := upto
-        ELSE sym := null
-        END ;
-        Texts.Read(R, ch)
-      END
-    } while ($sym === null);
-}   
-    
+        do {
+            if ($n < 16) {
+                $d[$n] = ord($this->ch) - 0x30;
+                $n++;
+            } else {
+                $this->Mark("too many digits");
+                $n = 0;
+            }
+            Texts::Read($this->R, $this->ch);
+        } while (!(($this->ch < "0") || ($this->ch > "9") && ($this->ch < "A") || ($this->ch > "F")));
+
+        if (($this->ch === "H") || ($this->ch === "R") || ($this->ch === "X")) {  // hex
+            do {
+                $h = $d[$i];
+                if ($h >= 10) {
+                    $h = $h - 7;
+                }
+                $k = $k * 0x10 + $h;
+                $i++;
+            } while ($i !== $n);
+
+            if ($this->ch === "X") {
+                $sym = self::T_char;
+                if ($k < 0x100) {
+                    $this->ival = $k;
+                } else {
+                    $this->Mark("illegal value");
+                    $this->ival = 0;
+                }
+            } elseif ($this->ch = "R") {
+                $sym = self::T_real;
+                $this->rval = floatval($k);
+            } else {
+                $sym = self::T_int;
+                $this->ival = $k;
+            }
+            Texts::Read($this->R, $this->ch);
+        } elseif ($this->ch === ".") {
+            Texts::Read($this->R, $this->ch);
+            if ($this->ch === ".") { // double dot
+                $this->ch = 0x7F;  // decimal integer
+                do {
+                    if ($d[$i] < 10) {
+                        if ($k <= ($MAX - $d[$i]) / 10) {
+                            $k = $k * 10 + $d[$i];
+                        } else {
+                            $this->Mark("too large");
+                            $k = 0;
+                        }
+                    } else {
+                        $this->Mark("bad integer");
+                    }
+                    $i++;
+                } while ($i !== $n);
+                $sym = self::T_int;
+                $this->ival = $k;
+            } else { // real number
+                $x = 0.0;
+                $e = 0;
+                do {  // integer part
+                    $x = $x * 10.0 + $d[$i];
+                    $i++;
+                } while ($i !== $n);
+
+                while (($this->ch >= "0") && ($this->ch <= "9")) { // fraction
+                    $x = $x * 10.0 + ord($this->ch) - 0x30;
+                    $e--;
+                    Texts::Read($this->R, $this->ch);
+                }
+
+                if (($this->ch = "E") || ($this->ch = "D")) { // scale factor
+                    Texts::Read($this->R, $this->ch);
+                    $s = 0;
+
+                    if ($this->ch === "-") {
+                        $negE = true;
+                        Texts::Read($this->R, $this->ch);
+                    } else {
+                        $negE = false;
+                        if ($this->ch === "+") {
+                            Texts::Read($this->R, $this->ch);
+                        }
+                    }
+
+                    if (($this->ch >= "0") && ($this->ch <= "9")) {
+                        do {
+                            $s = $s * 10 + ord($this->ch) - 0x30;
+                            Texts::Read($this->R, $this->ch);
+                        } while (!(($this->ch < "0") || ($this->ch > "9")));
+                        if ($negE) {
+                            $e = $e - $s;
+                        } else {
+                            $e = $e + $s;
+                        }
+                    } else {
+                        $this->Mark("digit?");
+                    }
+                }
+
+                if ($e < 0) {
+                    if ($e >= -self::maxExp) {
+                        $x = $x / $this->Ten(-$e);
+                    } else {
+                        $x = 0.0;
+                    }
+                } elseif ($e > 0) {
+                    if ($e <= self::maxExp) {
+                        $x = $this->Ten($e) * $x;
+                    } else {
+                        $x = 0.0;
+                        $this->Mark("too large");
+                    }
+                }
+
+                $sym = self::T_real;
+                $this->rval = $x;
+            }
+        } else {  // decimal integer
+            do {
+                if ($d[$i] < 10) {
+                    if ($k <= ($MAX - $d[$i]) / 10) {
+                        $k = $k * 10 + $d[$i];
+                    } else {
+                        $this->Mark("too large");
+                        $k = 0;
+                    }
+                } else {
+                    $this->Mark("bad integer");
+                }
+                $i++;
+            } while ($i !== $n);
+            $sym = self::T_int;
+            $this->ival = $k;
+        }
+    }
+
+    private function Identifier(int &$sym)
+    {
+        $i = 0;
+        do {
+            if ($i < self::IdLen - 1) {
+                $this->id[$i] = $this->ch;
+                $i++;
+            }
+            Texts::Read($this->R, $this->ch);
+        } while (($this->ch < "0") or ($this->ch > "9") & ($this->ch < "A") or ($this->ch > "Z") & ($this->ch < "a") or ($this->ch > "z"));
+
+        $this->id[$i] = "\0";
+        if ($i < 10) {
+            $k = $this->KWX[$i - 1]; // search for keyword
+            while (($this->id != $this->keyTab[$k]['id']) && ($k < $this->KWX[$i])) {
+                $k++;
+            }
+
+            if ($k < $this->KWX[$i]) {
+                $sym = $this->keyTab[$k]['sym'];
+            } else {
+                $sym = self::T_ident;
+            }
+        } else {
+            $sym = self::T_ident;
+        }
+    }
+
+    private function Ten(int $e): float
+    {
+        $x = 1.0;
+        $t = 10.0;
+        while ($e > 0) {
+            if ($e % 2 !== 0) {
+                $x = $t * $x;
+            }
+            $t = $t * $t;
+            $e = intval($e / 2);
+        }
+
+        return $x;
+    }
 }
