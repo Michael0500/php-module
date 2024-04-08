@@ -1,0 +1,33 @@
+#!/bin/bash
+
+export JAVA_HOME=/home/ruslan/.jdks/temurin-17.0.7
+export PLATFORM_TOOLS=/home/ruslan/android-sdk/platform-tools
+export BUILD_TOOLS=/home/ruslan/android-sdk/build-tools/34.0.0
+export APKTOOL=/home/ruslan/Android/apktool
+export JADX=/home/ruslan/Android/jadx/bin
+export GHIDRA=/home/ruslan/Android/ghidra_11.1_DEV
+
+export PATH=$JAVA_HOME/bin:$PLATFORM_TOOLS:$BUILD_TOOLS:$APKTOOL:$JADX:$GHIDRA:$PATH
+
+
+
+#  Run decompile gui application for view
+jadx-gui
+
+# decompile app
+apktool.sh d robotrickster.apk
+
+# modificate source app and build .apk
+apktool.sh b ./robotrickster/ -o robotrickster_nozip.apk
+
+# zipalign
+zipalign -p -f -v 4 robotrickster_nozip.apk robotrickster.apk
+
+# Generate keystore
+keytool -genkey -v -keystore android-app.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias app
+
+# Signin app in keystore
+apksigner sign --ks-key-alias app --ks android-app.keystore robotrickster.apk
+
+# Install to device for testing changes
+adb install robotrickster.apk
