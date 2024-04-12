@@ -1,11 +1,11 @@
 #!/bin/bash
 
-export JAVA_HOME=/home/ruslan/.jdks/temurin-17.0.7
-export PLATFORM_TOOLS=/home/ruslan/android-sdk/platform-tools
-export BUILD_TOOLS=/home/ruslan/android-sdk/build-tools/34.0.0
-export APKTOOL=/home/ruslan/Android/apktool
-export JADX=/home/ruslan/Android/jadx/bin
-export GHIDRA=/home/ruslan/Android/ghidra_11.1_DEV
+export JAVA_HOME=~/.jdks/temurin-17.0.7
+export PLATFORM_TOOLS=~/android-sdk/platform-tools
+export BUILD_TOOLS=~/android-sdk/build-tools/34.0.0
+export APKTOOL=~/Android/apktool
+export JADX=~/Android/jadx/bin
+export GHIDRA=~/Android/ghidra_11.1_DEV
 
 export PATH=$JAVA_HOME/bin:$PLATFORM_TOOLS:$BUILD_TOOLS:$APKTOOL:$JADX:$GHIDRA:$PATH
 
