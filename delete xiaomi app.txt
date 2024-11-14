@@ -1,0 +1,28 @@
+Подключаемся к Xiaomi Readmi:
+adb shell
+
+Чтобы удалить приложения:
+pm uninstall -k --user 0 com.xiaomi.payment
+pm uninstall -k --user 0 com.xiaomi.mipicks
+pm uninstall -k --user 0 com.android.thememanager
+pm uninstall -k --user 0 com.xiaomi.glgm
+pm uninstall -k --user 0 com.miui.miservice
+pm uninstall -k --user 0 com.miui.videoplayer
+pm uninstall -k --user 0 com.miui.player
+pm uninstall -k --user 0 com.xiaomi.midrop
+pm uninstall -k --user 0 com.miui.compass
+pm uninstall -k --user 0 com.miui.screenrecorder
+pm uninstall -k --user 0 com.android.browser
+pm uninstall -k --user 0 com.miui.hybrid
+pm uninstall -k --user 0 com.miui.android.fashiongallery
+pm uninstall -k --user 0 com.xiaomi.finddevice
+pm uninstall -k --user 0 com.google.android.music
+pm uninstall -k --user 0 com.xiaomi.xmsf
+pm uninstall -k --user 0 com.miui.cloudbackup
+pm uninstall -k --user 0 com.google.android.apps.tachyon
+pm uninstall -k --user 0 com.google.android.videos
+pm uninstall -k --user 0 com.micredit.in
+pm uninstall -k --user 0 com.miui.cloudservice
+pm uninstall -k --user 0 com.miui.yellowpage
+pm uninstall -k --user 0 com.mi.android.globalminusscreen
+pm uninstall -k --user 0 com.google.android.partnersetup
