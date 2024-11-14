@@ -1,0 +1,79 @@
+Удаление ненужных приложений Tecno Pova 5:
+
+cd ~/r/Android/Sdk/platform-tools
+
+./adb shell
+
+pm uninstall -k --user 0 com.example.packagename // Собственно сама команда по удалению приложения по его packageName
+
+или просто команду:
+./adb shell pm uninstall -k --user 0 com.example.packagename
+
+Имена packageName:
+com.google.android.videos -- гугл тв
+com.google.android.apps.tachyon -- гугл митап
+com.google.android.apps.wellbeing -- цифровое благополучие
+com.google.android.partnersetup
+com.google.android.projection.gearhead - Android Auto
+com.google.android.marvin.talkback -- Специальные возможности
+com.google.android.as.oss -- Private Compute Service
+ru.yandex.androidkeyboard -- яндекс клавиатура
+com.google.android.apps.youtube.music 
+com.transsion.healthlife
+com.transsion.phonemaster
+com.transsion.magazineservice.hios
+com.transsion.scanningrecharger
+com.transsion.magicshow - Vishna Video
+
+
+Удалить приложения:
+./adb shell pm uninstall -k --user 0 ru.yandex.androidkeyboard
+./adb shell pm uninstall -k --user 0 net.bat.store
+./adb shell pm uninstall -k --user 0 com.transsion.healthlife
+./adb shell pm uninstall -k --user 0 com.transsion.carlcare
+./adb shell pm uninstall -k --user 0 com.transsnet.store
+./adb shell pm uninstall -k --user 0 com.transsion.wezone
+./adb shell pm uninstall -k --user 0 com.transsion.smartpanel
+./adb shell pm uninstall -k --user 0 com.transsion.phonemaster
+./adb shell pm uninstall -k --user 0 com.transsion.magicshow
+./adb shell pm uninstall -k --user 0 com.transsion.magazineservice.hios
+./adb shell pm uninstall -k --user 0 com.google.android.apps.youtube.music
+./adb shell pm uninstall -k --user 0 com.google.android.apps.nbu.files
+./adb shell pm uninstall -k --user 0 com.google.android.apps.tachyon
+./adb shell pm uninstall -k --user 0 com.google.android.projection.gearhead
+./adb shell pm uninstall -k --user 0 com.google.android.apps.wellbeing
+./adb shell pm uninstall -k --user 0 com.google.android.partnersetup
+./adb shell pm uninstall -k --user 0 com.google.android.videos
+./adb shell pm uninstall -k --user 0 com.google.android.apps.googleassistant
+./adb shell pm uninstall -k --user 0 com.google.android.gms.supervision
+./adb shell pm uninstall -k --user 0 com.google.android.marvin.talkback
+
+
+
+Список всех пакетов приложений:
+adb shell pm list package
+
+
+Путь к apk файлу приложения:
+adb shell pm path com.example.someapp
+
+
+Скачать apk файл с устройства на комп:
+adb pull /system_ext/app/TranssionFMRadio/TranssionFMRadio.apk ~/TecnoPova/TranssionFMRadio.apk
+
+
+Скрипт скачивает все приложения в apk виде на комп:
+for i in $(./adb shell pm list packages | awk -F':' '{print $2}'); do 
+  ./adb pull "$(./adb shell pm path $i | awk -F':' '{print $2}')"
+done
+
+
+Скопирует все приложения с телефона в виде apk, каждый в папку соответствующую имени пакета
+mkdir -p ./apk_files
+for i in $(./adb shell pm list packages); do 
+  package=`echo $i | awk -F':' '{print $2}'`
+  appPath=$(./adb shell pm path $package | awk -F':' '{print $2}')
+  appName=$(./adb shell pm path $package | awk -F':' '{print $2}' | awk -F'/' '{print $NF}')
+  mkdir -p ./apk_files/$package/
+  ./adb pull $appPath ./apk_files/$package/$appName
+done
