@@ -89,5 +89,5 @@ make install
 командой просмотра установленных расширений: 
 
 ```shell script
-[srvradw@vs1033 ~]$ php -m
+[Michael0500@linux ~]$ php -m
 ```
