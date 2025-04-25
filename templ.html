@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Одностраничный PDF</title>
+    <style>
+        @page {
+            size: A4; /* Можно: A4 landscape, 210mm 297mm и т.п. */
+            margin: 20mm;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .content {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            height: 100%; /* растягивается на всю страницу */
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>Приглашение</h1>
+        <p>Вы приглашены на вечеринку по случаю дня рождения в саду!</p>
+        <!-- Всё содержимое здесь -->
+    </div>
+</body>
+</html>
