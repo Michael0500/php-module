@@ -1,0 +1,821 @@
+### USER
+Напиши каркас приложения, сделай чтоб был загрузчик (индикатор loader загрузки при выполнении длительных операций), при переходах между страницами не нужно было заново загружать данные из API
+
+### ASSISTANT
+Для реализации Single Page Application (SPA) на базе Yii2 и Vue.js с учетом ваших требований (кеширование данных, индикатор загрузки, использование готового API), мы будем использовать **Vue 3** (через CDN или сборку, но для простоты интеграции в Yii2 часто используют подход с одним корневым элементом) и **Vue Router**.
+
+Поскольку данные не должны загружаться заново при переходах, мы будем хранить состояние приложения в **Reactive State** (или простом хранилище внутри Vue), которое живет дольше, чем отдельные компоненты страниц.
+
+Ниже представлен каркас решения.
+
+### 1. Структура файлов в Yii2
+
+Предположим, что у вас есть контроллер `SiteController` или специальный `ApiController` для отдачи начальной страницы.
+
+Создайте следующую структуру в frontend/web (или assets):
+*   `js/app.js` — Точка входа Vue.
+*   `js/store.js` — Хранилище состояния (для кеширования данных счетов).
+*   `js/api.js` – Обертка над AJAX запросами к вашему Yii2 backend (который вызывает `casapro_api.get_accounts`).
+*   `views/site/index.php` — Главный layout, где подключается Vue.
+
+### 2. Реализация Store (Хранилище состояния)
+
+Файл: `frontend/web/js/store.js`
+
+Здесь мы храним данные счетов. Если данные уже есть, мы не делаем запрос к API.
+
+```javascript
+import { reactive } from 'vue';
+
+export const store = reactive({
+    // Состояние загрузки
+    isLoading: false,
+    
+    // Ошибки
+    error: null,
+
+    // Кеш данных
+    accountsData: null, // Здесь будет лежать ответ от API: {  {...}, customer_name: ... }
+    currentCustomerNo: null,
+
+    // Метод для установки данных
+    setAccounts(data, customerNo) {
+        this.accountsData = data;
+        this.currentCustomerNo = customerNo;
+    },
+
+    // Метод очистки (если нужно выйти из профиля)
+    clear() {
+        this.accountsData = null;
+        this.currentCustomerNo = null;
+        this.error = null;
+    }
+});
+```
+
+### 3. Реализация API клиента
+
+Файл: `frontend/web/js/api.js`
+
+Этот модуль делает запросы к Yii2 контроллеру. Yii2 контроллер, в свою очередь, вызывает хранимую процедуру PostgreSQL.
+
+```javascript
+import axios from 'axios'; // Или используйте fetch, если не хотите подключать axios
+
+// Базовый URL вашего Yii2 приложения
+const API_BASE_URL = '/api'; // Предположим, вы настроили urlManager в Yii2
+
+export const apiClient = {
+    async getAccounts(customerNo) {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/accounts`, {
+                params: { customer_no: customerNo }
+            });
+            return response.data;
+        } catch (error) {
+            throw error;
+        }
+    }
+};
+```
+
+### 4. Компоненты Vue
+
+#### A. Глобальный Loader (Индикатор загрузки)
+
+Файл: `frontend/web/js/components/Loader.vue` (если используете .vue файлы) или просто компонент в `app.js`.
+
+Для простоты примера без сборщиков (SFC), определим его как объект в `app.js`.
+
+#### B. Страница списка счетов (AccountsList)
+
+Этот компонент проверяет `store`. Если данных нет — загружает. Если есть — показывает сразу.
+
+### 5. Основной файл приложения (app.js)
+
+Файл: `frontend/web/js/app.js`
+
+```javascript
+import { createApp, ref, computed } from 'vue';
+import { createRouter, createWebHistory } from 'vue-router';
+import { store } from './store.js';
+import { apiClient } from './api.js';
+
+// --- Компоненты ---
+
+// 1. Компонент Loader
+const Loader = {
+    template: `
+        <div v-if="store.isLoading" class="loader-overlay">
+            <div class="spinner"></div>
+            <p>Загрузка данных...</p>
+        </div>
+    `,
+    setup() {
+        return { store };
+    }
+};
+
+// 2. Компонент: Список счетов
+const AccountsList = {
+    template: `
+        <div class="accounts-page">
+            <h2>Счета клиента: {{ customerName }}</h2>
+            
+            <div v-if="store.error" class="error-box">
+                {{ store.error }}
+            </div>
+
+            <table v-else-if="accounts && accounts.length > 0" class="table">
+                <thead>
+                    <tr>
+                        <th>Филиал</th>
+                        <th>Номер счета (Sysacc)</th>
+                        <th>Баланс</th>
+                        <th>Дата открытия</th>
+                        <th>Дата закрытия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="acc in accounts" :key="acc.sysacc">
+                        <td>{{ acc.branch }}</td>
+                        <td>{{ acc.sysacc }}</td>
+                        <td>{{ formatMoney(acc.current_bal) }}</td>
+                        <td>{{ acc.open_date }}</td>
+                        <td>{{ acc.close_date || '-' }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div v-else>
+                <p>Нет доступных счетов.</p>
+            </div>
+            
+            <button @click="goToDetails" class="btn">Перейти к деталям (пример роутинга)</button>
+        </div>
+    `,
+    setup() {
+        const customerNo = '12345678'; // В реальном приложении берется из props или глобального состояния пользователя
+        
+        // Вычисляемое свойство для получения данных из стора
+        const accounts = computed(() => {
+            return store.accountsData?.data?.accounts_data || [];
+        });
+        
+        const customerName = computed(() => {
+            return store.accountsData?.data?.customer_name || 'Неизвестно';
+        });
+
+        // Функция загрузки данных (с проверкой кеша)
+        const loadData = async () => {
+            // Если данные уже есть в сторе, ничего не делаем
+            if (store.accountsData) {
+                return;
+            }
+
+            store.isLoading = true;
+            store.error = null;
+
+            try {
+                // Вызов API
+                const result = await apiClient.getAccounts(customerNo);
+                
+                // Проверка на ошибки в формате API (согласно документации)
+                if (result.errors && result.errors.length > 0) {
+                    throw new Error(result.errors[0].message);
+                }
+
+                // Сохраняем в стор (кешируем)
+                store.setAccounts(result, customerNo);
+            } catch (e) {
+                store.error = e.message || 'Ошибка загрузки данных';
+            } finally {
+                store.isLoading = false;
+            }
+        };
+
+        // Загружаем данные при монтировании компонента
+        loadData();
+
+        const formatMoney = (value) => {
+            return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(value);
+        };
+        
+        const router = useRouter(); // Импорт ниже
+        const goToDetails = () => {
+             router.push('/details');
+        };
+
+        return { store, accounts, customerName, formatMoney, goToDetails };
+    }
+};
+
+// 3. Компонент: Заглушка для другой страницы
+const DetailsPage = {
+    template: `<div><h2>Детальная информация</h2><p>Здесь могут быть блокировки или движения.</p><router-link to="/">Назад к счетам</router-link></div>`
+};
+
+// --- Роутер ---
+
+const routes = [
+    { path: '/', component: AccountsList },
+    { path: '/details', component: DetailsPage },
+];
+
+const router = createRouter({
+    history: createWebHistory(), // Используйте createWebHashHistory() если нет настройки сервера для SPA
+    routes
+});
+
+// --- Инициализация App ---
+
+const app = createApp({
+    components: {
+        Loader,
+        AccountsList,
+        DetailsPage
+    },
+    setup() {
+        return { store };
+    },
+    template: `
+        <div id="app">
+            <Loader />
+            <nav style="margin-bottom: 20px;">
+                <router-link to="/">Счета</router-link> | 
+                <router-link to="/details">Детали</router-link>
+            </nav>
+            <router-view></router-view>
+        </div>
+    `
+});
+
+app.use(router);
+app.mount('#vue-app');
+```
+
+### 6. Интеграция в Yii2 View
+
+Файл: `views/site/index.php` (или любой другой view, который отдает SPA)
+
+```php
+<?php
+/* @var $this yii\web\View */
+$this->title = 'Управление счетами';
+?>
+
+<div id="vue-app">
+    <!-- Vue приложение смонтируется здесь -->
+    <div style="text-align: center; margin-top: 50px;">
+        Загрузка приложения...
+    </div>
+</div>
+
+<!-- Подключение Vue 3 и Vue Router через CDN (для простоты, можно собрать через Webpack/Vite) -->
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://unpkg.com/vue-router@4/dist/vue-router.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<!-- Подключение ваших скриптов (предварительно собранных в один bundle или по отдельности, если используете ES modules с type="module") -->
+<!-- Примечание: Для работы import/export в браузере нужен type="module" и правильный путь -->
+<script type="module" src="<?= Yii::getAlias('@web/js/app.js') ?>"></script>
+
+<style>
+    /* Простые стили для Loader */
+    .loader-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .error-box {
+        color: red;
+        padding: 10px;
+        border: 1px solid red;
+        background: #ffe6e6;
+    }
+    table.table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    table.table th, table.table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+    }
+</style>
+```
+
+### 7. Backend часть (Yii2 Controller)
+
+Вам нужен контроллер, который примет запрос от Vue и вызовет хранимую процедуру.
+
+Файл: `controllers/ApiController.php`
+
+```php
+<?php
+namespace app\controllers;
+
+use Yii;
+use yii\web\Controller;
+use yii\web\Response;
+
+class ApiController extends Controller
+{
+    public function beforeAction($action)
+    {
+        $this->enableCsrfValidation = false; // Для API запросов часто отключают CSRF или используют токены
+        return parent::beforeAction($action);
+    }
+
+    public function actionAccounts()
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $customerNo = Yii::$app->request->get('customer_no');
+
+        if (!$customerNo) {
+            return ['errors' => [['code' => '400', 'message' => 'Customer number is required']]];
+        }
+
+        try {
+            // Вызов хранимой процедуры PostgreSQL
+            // Предполагаем, что у вас настроен компонент db
+            $sql = "SELECT casapro_api_get_accounts(:customer_no) as result";
+            $command = Yii::$app->db->createCommand($sql, [':customer_no' => $customerNo]);
+            $rawJson = $command->queryScalar();
+
+            // Декодируем JSON из PG
+            $data = json_decode($rawJson, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                 return ['errors' => [['code' => 'PARSE_ERROR', 'message' => 'Invalid JSON from DB']]];
+            }
+
+            return $data;
+
+        } catch (\Exception $e) {
+            Yii::error($e->getMessage());
+            return ['errors' => [['code' => '500', 'message' => 'Internal Server Error']]];
+        }
+    }
+}
+```
+
+### Ключевые моменты решения:
+
+1.  **Кеширование данных (Store):**
+    *   В `store.js` мы храним `accountsData`.
+    *   В компоненте `AccountsList` перед вызовом API мы проверяем `if (store.accountsData) return;`.
+    *   Это гарантирует, что при переходе на другую страницу и возвращении назад, данные берутся из памяти браузера (переменной JS), а не запрашиваются у сервера.
+
+2.  **Индикатор загрузки (Loader):**
+    *   В `store.js` есть флаг `isLoading`.
+    *   Компонент `Loader` подписан на этот флаг реактивно. Когда `isLoading` становится `true`, оверлей появляется.
+    *   Мы управляем этим флагом в `api.js` или внутри `setup()` компонента перед/после `await`.
+
+3.  **Обработка ошибок:**
+    *   Учитывается формат ответа API (`errors` array), описанный в `get_accounts.md`.
+
+4.  **SPA Архитектура:**
+    *   Используется `vue-router`. Переключение между "страницами" происходит без перезагрузки браузера, поэтому состояние JS-приложения (и наш Store) сохраняется.
+
+### Рекомендации по развитию:
+
+*   **Сборка:** Для продакшена лучше использовать Vite или Webpack для сборки `.vue` файлов и JS модулей в один бандл, чтобы избежать проблем с совместимостью браузеров и `import/export`.
+*   **Безопасность:** Убедитесь, что `customer_no` передается безопасно и пользователь имеет право видеть эти счета (проверка прав доступа должна быть на стороне Yii2/PostgreSQL).
+*   **Типизация:** Если проект большой, рассмотрите использование TypeScript.
+
+### USER
+Как подключить Vite для сборки .vue файлов и js
+
+### ASSISTANT
+Подключение Vite к существующему проекту на Yii2 — это отличный выбор для современной разработки SPA. Vite будет отвечать за компиляцию `.vue` файлов, обработку импортов и сборку JS/CSS в оптимизированные бандлы, которые затем подключаются в Yii2 views.
+
+Вот пошаговая инструкция, как интегрировать Vite в ваш проект.
+
+### Шаг 1: Инициализация Node.js проекта
+
+В корневой папке вашего Yii2 приложения (там, где лежит `composer.json`, `requirements.php` и т.д.) выполните:
+
+```bash
+npm init -y
+```
+
+### Шаг 2: Установка зависимостей
+
+Установите Vite, плагин для Vue и сам Vue (если вы еще не установили его глобально через CDN, лучше управлять версиями через npm):
+
+```bash
+npm install vue vue-router axios
+npm install -D vite @vitejs/plugin-vue
+```
+
+### Шаг 3: Структура файлов для фронтенда
+
+Создайте папку `frontend` (или `assets/vue`) в корне проекта для исходных кодов Vue. Например:
+
+```text
+project-root/
+├── frontend/
+│   ├── src/
+│   │   ├── App.vue          # Корневой компонент
+│   │   ├── main.js          # Точка входа JS
+│   │   ├── store.js         # Ваше хранилище
+│   │   ├── api.js           # Ваш API клиент
+│   │   ├── router.js        # Конфигурация роутера
+│   │   └── components/      # Папка с компонентами (.vue)
+│   │       ├── Loader.vue
+│   │       ├── AccountsList.vue
+│   │       └── DetailsPage.vue
+├── web/                     # Папка webroot Yii2
+│   └── build/               # Сюда Vite будет складывать готовые файлы
+├── vite.config.js           # Конфиг Vite
+├── package.json
+└── ...
+```
+
+### Шаг 4: Настройка Vite (`vite.config.js`)
+
+Создайте файл `vite.config.js` в корне проекта:
+
+```javascript
+import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [vue()],
+  root: './frontend', // Исходники лежат в папке frontend
+  base: '/build/',    // Базовый путь для ассетов (совпадает с папкой вывода)
+  build: {
+    outDir: '../web/build', // Куда собирать файлы (в папку web Yii2)
+    emptyOutDir: true,      // Очищать папку перед сборкой
+    rollupOptions: {
+      input: './frontend/src/main.js', // Точка входа
+    },
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    // Важно для Yii2: разрешаем доступ к dev-серверу
+    cors: true, 
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './frontend/src'),
+    },
+  },
+});
+```
+
+### Шаг 5: Рефакторинг кода Vue под Single File Components (.vue)
+
+Теперь перенесем логику из предыдущего ответа в отдельные файлы.
+
+#### 1. `frontend/src/store.js`
+(Без изменений, но экспортируем как модуль)
+
+```javascript
+import { reactive } from 'vue';
+
+export const store = reactive({
+    isLoading: false,
+    error: null,
+    accountsData: null,
+    currentCustomerNo: null,
+
+    setAccounts(data, customerNo) {
+        this.accountsData = data;
+        this.currentCustomerNo = customerNo;
+    },
+
+    clear() {
+        this.accountsData = null;
+        this.currentCustomerNo = null;
+        this.error = null;
+    }
+});
+```
+
+#### 2. `frontend/src/api.js`
+
+```javascript
+import axios from 'axios';
+
+// В режиме разработки проксируем запросы, чтобы не было CORS ошибок
+// В продакшене это будет относительный путь /api/accounts
+const API_BASE = import.meta.env.DEV ? 'http://localhost:5173/api' : '/api';
+
+export const apiClient = {
+    async getAccounts(customerNo) {
+        // Если мы на dev-сервере Vite, нам нужен прокси (см. шаг 7)
+        // Или просто указываем полный путь до Yii2 backend
+        const url = import.meta.env.DEV 
+            ? `/api/accounts?customer_no=${customerNo}` 
+            : `/api/accounts?customer_no=${customerNo}`;
+            
+        try {
+            const response = await axios.get(url);
+            return response.data;
+        } catch (error) {
+            throw error;
+        }
+    }
+};
+```
+
+#### 3. `frontend/src/components/Loader.vue`
+
+```vue
+<template>
+  <div v-if="store.isLoading" class="loader-overlay">
+    <div class="spinner"></div>
+    <p>Загрузка данных...</p>
+  </div>
+</template>
+
+<script setup>
+import { store } from '../store';
+</script>
+
+<style scoped>
+.loader-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+```
+
+#### 4. `frontend/src/components/AccountsList.vue`
+
+```vue
+<template>
+  <div class="accounts-page">
+    <h2>Счета клиента: {{ customerName }}</h2>
+    
+    <div v-if="store.error" class="error-box">
+      {{ store.error }}
+    </div>
+
+    <table v-else-if="accounts && accounts.length > 0" class="table">
+      <thead>
+        <tr>
+          <th>Филиал</th>
+          <th>Номер счета (Sysacc)</th>
+          <th>Баланс</th>
+          <th>Дата открытия</th>
+          <th>Дата закрытия</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="acc in accounts" :key="acc.sysacc">
+          <td>{{ acc.branch }}</td>
+          <td>{{ acc.sysacc }}</td>
+          <td>{{ formatMoney(acc.current_bal) }}</td>
+          <td>{{ acc.open_date }}</td>
+          <td>{{ acc.close_date || '-' }}</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <div v-else-if="!store.isLoading && !store.error">
+      <p>Нет доступных счетов.</p>
+    </div>
+    
+    <button @click="goToDetails" class="btn">Перейти к деталям</button>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { store } from '../store';
+import { apiClient } from '../api';
+
+const router = useRouter();
+const customerNo = '12345678'; // Получать из props или глобального состояния
+
+const accounts = computed(() => {
+  return store.accountsData?.data?.accounts_data || [];
+});
+
+const customerName = computed(() => {
+  return store.accountsData?.data?.customer_name || 'Неизвестно';
+});
+
+const loadData = async () => {
+  if (store.accountsData) return; // Кеш
+
+  store.isLoading = true;
+  store.error = null;
+
+  try {
+    const result = await apiClient.getAccounts(customerNo);
+    
+    if (result.errors && result.errors.length > 0) {
+      throw new Error(result.errors[0].message);
+    }
+
+    store.setAccounts(result, customerNo);
+  } catch (e) {
+    store.error = e.message || 'Ошибка загрузки данных';
+  } finally {
+    store.isLoading = false;
+  }
+};
+
+onMounted(() => {
+  loadData();
+});
+
+const formatMoney = (value) => {
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(value);
+};
+
+const goToDetails = () => {
+  router.push('/details');
+};
+</script>
+
+<style scoped>
+/* Стили для таблицы */
+.table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+.table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+.error-box { color: red; padding: 10px; border: 1px solid red; background: #ffe6e6; margin-bottom: 10px; }
+.btn { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+</style>
+```
+
+#### 5. `frontend/src/App.vue`
+
+```vue
+<template>
+  <div id="app">
+    <Loader />
+    <nav style="margin-bottom: 20px;">
+      <router-link to="/">Счета</router-link> | 
+      <router-link to="/details">Детали</router-link>
+    </nav>
+    <router-view></router-view>
+  </div>
+</template>
+
+<script setup>
+import Loader from './components/Loader.vue';
+</script>
+```
+
+#### 6. `frontend/src/router.js`
+
+```javascript
+import { createRouter, createWebHistory } from 'vue-router';
+import AccountsList from './components/AccountsList.vue';
+import DetailsPage from './components/DetailsPage.vue'; // Создайте аналогично AccountsList
+
+const routes = [
+  { path: '/', component: AccountsList },
+  { path: '/details', component: DetailsPage },
+];
+
+const router = createRouter({
+  history: createWebHistory(), // Или createWebHashHistory()
+  routes
+});
+
+export default router;
+```
+
+#### 7. `frontend/src/main.js`
+
+```javascript
+import { createApp } from 'vue';
+import App from './App.vue';
+import router from './router';
+
+const app = createApp(App);
+app.use(router);
+app.mount('#vue-app');
+```
+
+### Шаг 6: Настройка Yii2 View
+
+Файл: `views/site/index.php`
+
+Теперь вместо подключения скриптов вручную, мы подключаем результат сборки Vite.
+
+```php
+<?php
+$this->title = 'Управление счетами';
+
+// Определяем, какой скрипт подключать
+$isDev = YII_ENV_DEV;
+$baseUrl = Yii::getAlias('@web');
+
+if ($isDev) {
+    // В режиме разработки подключаем клиент Vite (HMR)
+    echo '<script type="module" src="http://localhost:5173/@vite/client"></script>';
+    echo '<script type="module" src="http://localhost:5173/frontend/src/main.js"></script>';
+} else {
+    // В продакшене подключаем собранные файлы
+    // Vite генерирует manifest.json, но для простоты можно подключить явно,
+    // если имя файла фиксировано (например, index.js)
+    echo '<link rel="stylesheet" href="' . $baseUrl . '/build/assets/index.css">';
+    echo '<script type="module" src="' . $baseUrl . '/build/assets/index.js"></script>';
+}
+?>
+
+<div id="vue-app">
+    <!-- Заглушка пока Vue не загрузился -->
+    <div style="text-align: center; margin-top: 50px;">
+        Загрузка приложения...
+    </div>
+</div>
+```
+
+*Примечание:* Для продакшена лучше использовать пакет `yiisoft/yii2-vite` или писать простой helper, который читает `manifest.json` из папки `web/build`, чтобы подключать правильные хешированные имена файлов (например, `index.abc123.js`).
+
+### Шаг 7: Настройка Proxy в Vite (для разработки)
+
+Чтобы при разработке на `localhost:5173` вы могли делать запросы к Yii2 (`localhost:8080` или другому порту) без проблем с CORS, добавьте proxy в `vite.config.js`:
+
+```javascript
+export default defineConfig({
+  // ... остальные настройки
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080', // Адрес вашего Yii2 приложения
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
+});
+```
+
+### Шаг 8: Скрипты в `package.json`
+
+Добавьте команды для запуска:
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
+```
+
+### Как работать
+
+1.  **Разработка:**
+    *   Запустите Yii2 приложение (например, `php yii serve`).
+    *   В отдельном терминале запустите `npm run dev`.
+    *   Откройте браузер по адресу Yii2 (например, `http://localhost:8080/site/index`).
+    *   Vue будет загружаться с Vite-сервера, изменения в `.vue` файлах будут применяться мгновенно (HMR).
+
+2.  **Продакшен:**
+    *   Выполните `npm run build`.
+    *   Vite создаст оптимизированные файлы в `web/build/`.
+    *   Yii2 будет отдавать статические файлы из этой папки.
+
+### Преимущества такого подхода:
+1.  **Кеширование:** Логика `store.js` остается прежней. Данные загружаются один раз и хранятся в памяти JS, пока страница не перезагружена полностью (F5). При навигации через Vue Router данные не запрашиваются повторно.
+2.  **Loader:** Глобальный стейт `isLoading` управляет видимостью лоадера во всем приложении.
+3.  **Современность:** Вы используете `.vue` файлы, импорты, CSS scopes и быструю сборку.
