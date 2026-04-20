@@ -381,3 +381,240 @@ public function actionIndex($alias = null)
 3. При необходимости сброса кэша используйте `store.clearCache('key')`.
 
 Проект полностью готов к наполнению бизнес-логикой. Если нужны примеры таблиц с сортировкой/фильтрацией или адаптация под конкретные API-сигнатуры из документации, напишите, и я предоставлю готовые компоненты.
+
+
+### Счета клиента
+Вот полный код компонента `AccountsView.vue`, который заменяет заглушку. Код написан на Vue 3 Composition API, использует Pinia для кэширования, Bootstrap 5 для стилей и реализует клиентскую сортировку/фильтрацию без повторных запросов к API.
+
+`frontend/vue-src/src/views/AccountsView.vue`
+
+```vue
+<template>
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+      <h4 class="mb-0 text-primary fw-bold">📄 Счета клиента</h4>
+      <span v-if="customerName" class="badge bg-primary fs-6 px-3 py-2">
+        👤 {{ customerName }}
+      </span>
+    </div>
+    
+    <div class="card-body">
+      <!-- Форма поиска -->
+      <form @submit.prevent="fetchAccounts" class="row g-3 mb-4">
+        <div class="col-md-4">
+          <label for="customerNo" class="form-label fw-semibold">Номер клиента</label>
+          <div class="input-group">
+            <input 
+              id="customerNo"
+              type="text" 
+              v-model="customerNo" 
+              @input="onInput" 
+              @keyup.enter="fetchAccounts"
+              maxlength="8" 
+              class="form-control form-control-lg" 
+              placeholder="Введите 8 цифр"
+              :class="{ 'is-invalid': inputError }"
+              autocomplete="off"
+            >
+            <button type="submit" class="btn btn-primary btn-lg" :disabled="isLoading || inputError">
+              <span v-if="isLoading" class="spinner-border spinner-border-sm me-1"></span>
+              {{ isLoading ? 'Загрузка...' : 'Найти' }}
+            </button>
+          </div>
+          <div class="invalid-feedback d-block" v-if="inputError">{{ inputError }}</div>
+        </div>
+      </form>
+
+      <!-- Таблица результатов -->
+      <div v-if="accounts.length" class="table-responsive rounded border">
+        <table class="table table-hover table-striped align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th v-for="col in columns" :key="col.key" 
+                  class="sortable-header cursor-pointer text-nowrap"
+                  @click="sortBy(col.key)">
+                {{ col.label }}
+                <span v-if="sortKey === col.key" class="ms-1 text-primary">
+                  {{ sortDirection === 'asc' ? '▲' : '▼' }}
+                </span>
+              </th>
+            </tr>
+            <!-- Строка фильтров -->
+            <tr>
+              <td v-for="col in columns" :key="'f-' + col.key" class="p-1">
+                <input 
+                  type="text" 
+                  v-model="filters[col.key]" 
+                  class="form-control form-control-sm" 
+                  placeholder="Фильтр..."
+                >
+              </td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(acc, idx) in filteredSortedAccounts" :key="idx">
+              <td>{{ acc.branch || '-' }}</td>
+              <td class="font-monospace">{{ acc.sysacc || '-' }}</td>
+              <td class="font-monospace">{{ acc.account || '-' }}</td>
+              <td><span class="badge" :class="acc.acc_stat === '0' ? 'bg-success' : 'bg-secondary'">{{ acc.acc_stat || '-' }}</span></td>
+              <td>{{ formatDate(acc.open_date) }}</td>
+              <td>{{ formatDate(acc.close_date) }}</td>
+              <td class="text-end fw-bold text-dark">{{ formatMoney(acc.current_bal) }}</td>
+            </tr>
+            <tr v-if="filteredSortedAccounts.length === 0">
+              <td :colspan="columns.length" class="text-center text-muted py-4">Нет записей, соответствующих фильтру</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Пустое состояние -->
+      <div v-else-if="customerNo && !isLoading" class="alert alert-light border text-center py-4 mt-3">
+        <p class="mb-0 text-muted">Счета не найдены. Проверьте номер клиента или обновите данные.</p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { useDataStore } from '../stores/dataStore'
+
+const store = useDataStore()
+
+const customerNo = ref('')
+const inputError = ref('')
+const accounts = ref([])
+const customerName = ref('')
+const sortKey = ref('sysacc')
+const sortDirection = ref('asc')
+const filters = ref({})
+
+const columns = [
+  { key: 'branch', label: 'Филиал' },
+  { key: 'sysacc', label: 'Системный №' },
+  { key: 'account', label: 'Счет клиента' },
+  { key: 'acc_stat', label: 'Статус' },
+  { key: 'open_date', label: 'Открыт' },
+  { key: 'close_date', label: 'Закрыт' },
+  { key: 'current_bal', label: 'Остаток' }
+]
+
+// Инициализация фильтров
+columns.forEach(c => filters.value[c.key] = '')
+
+// Валидация ввода (только цифры, ровно 8)
+const onInput = (e) => {
+  const cleaned = e.target.value.replace(/\D/g, '')
+  customerNo.value = cleaned
+  if (cleaned.length > 0 && cleaned.length !== 8) {
+    inputError.value = 'Номер клиента должен содержать ровно 8 цифр'
+  } else if (cleaned.length === 8) {
+    inputError.value = ''
+  } else {
+    inputError.value = ''
+  }
+}
+
+// Загрузка данных через API
+const fetchAccounts = async () => {
+  if (inputError.value || customerNo.value.length !== 8) return
+  
+  try {
+    const cacheKey = `accounts:${customerNo.value}`
+    const res = await store.fetchData(cacheKey, 'casaproc_api.get_accounts', { p_customer_no: customerNo.value })
+    
+    if (res && Array.isArray(res.accounts_data)) {
+      accounts.value = res.accounts_data
+      customerName.value = res.customer_name || 'Клиент не указан'
+    } else {
+      accounts.value = []
+      customerName.value = ''
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки счетов:', err)
+    accounts.value = []
+    customerName.value = ''
+  }
+}
+
+// Вычисляемое свойство: фильтрация + сортировка
+const filteredSortedAccounts = computed(() => {
+  let data = [...accounts.value]
+  
+  // Фильтрация
+  Object.keys(filters.value).forEach(key => {
+    const val = filters.value[key].toLowerCase().trim()
+    if (val) {
+      data = data.filter(row => {
+        const cell = String(row[key] ?? '').toLowerCase()
+        return cell.includes(val)
+      })
+    }
+  })
+  
+  // Сортировка
+  if (sortKey.value) {
+    data.sort((a, b) => {
+      let valA = a[sortKey.value] ?? ''
+      let valB = b[sortKey.value] ?? ''
+      
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDirection.value === 'asc' ? valA - valB : valB - valA
+      }
+      
+      return sortDirection.value === 'asc'
+        ? String(valA).localeCompare(String(valB), 'ru')
+        : String(valB).localeCompare(String(valA), 'ru')
+    })
+  }
+  
+  return data
+})
+
+// Управление сортировкой
+const sortBy = (key) => {
+  if (sortKey.value === key) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDirection.value = 'asc'
+  }
+}
+
+// Форматирование
+const formatMoney = (val) => val != null 
+  ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(val) 
+  : '-'
+
+const formatDate = (val) => val ? new Date(val).toLocaleDateString('ru-RU') : '-'
+
+// Состояние загрузки из глобального стора
+const isLoading = computed(() => store.loading)
+</script>
+
+<style scoped>
+.sortable-header {
+  user-select: none;
+  transition: background 0.2s;
+}
+.sortable-header:hover {
+  background-color: #e9ecef;
+}
+.cursor-pointer {
+  cursor: pointer;
+}
+.font-monospace {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 0.9rem;
+}
+</style>
+```
+
+### Ключевые особенности реализации:
+
+    Кэширование Pinia: При первом запросе данные сохраняются под ключом accounts:<номер>. При повторных переходах на страницу или изменении фильтров/сортировки API не вызывается.
+    Клиентская сортировка и фильтрация: Работает мгновенно через computed, не нагружает сервер. Фильтры по каждому столбцу, сортировка по клику на заголовок.
+    Валидация: Поле принимает только цифры, блокирует отправку, если введено не 8 символов.
+    UI/UX: Используются компоненты Bootstrap (card, table, badge, spinner). Глобальный лоадер (<AppLoader />) автоматически появляется при запросе API, кнопка "Найти" блокируется во избежание дублирования запросов.
+    Форматирование: Даты приводятся к ru-RU формату, суммы отображаются как валюта с разделителями.
