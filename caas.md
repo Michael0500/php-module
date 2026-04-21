@@ -918,3 +918,412 @@ const isLoading = computed(() => store.loading)
 .font-monospace { font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace; font-size: 0.9rem; }
 </style>
 ```
+
+## Добавление формы о Состоянии счета
+
+```vue
+<template>
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+      <h4 class="mb-0 text-primary fw-bold">📊 Состояние счета и аналитика</h4>
+    </div>
+    
+    <div class="card-body">
+      <!-- Поисковая форма -->
+      <form @submit.prevent="handleSearch" class="row g-2 mb-4 align-items-end">
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Счет FCC12</label>
+          <input v-model="search.sys_acc_no" type="text" class="form-control form-control-sm" placeholder="Системный №" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Счет ЦБ</label>
+          <input v-model="search.cb_account" type="text" class="form-control form-control-sm" placeholder="CB Account">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Дата начала</label>
+          <input v-model="search.date_from" type="date" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Дата окончания</label>
+          <input v-model="search.date_to" type="date" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Внеш. система</label>
+          <input v-model="search.ext_system" type="text" class="form-control form-control-sm" placeholder="Напр. PHUB">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Дебет/Кредит</label>
+          <select v-model="search.drcr" class="form-select form-select-sm">
+            <option value="">Все</option>
+            <option value="D">Дебет (D)</option>
+            <option value="C">Кредит (C)</option>
+          </select>
+        </div>
+        <div class="col-md-1">
+          <label class="form-label small fw-semibold">Сумма от</label>
+          <input v-model.number="search.amount_from" type="number" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-1">
+          <label class="form-label small fw-semibold">Сумма до</label>
+          <input v-model.number="search.amount_to" type="number" class="form-control form-control-sm">
+        </div>
+        <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+          <button type="submit" class="btn btn-primary btn-sm px-4" :disabled="localLoading">
+            <span v-if="localLoading" class="spinner-border spinner-border-sm me-1"></span>
+            {{ localLoading ? 'Загрузка...' : 'Найти' }}
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm px-3" @click="resetSearch">Сбросить</button>
+        </div>
+      </form>
+
+      <!-- Карточка состояния счета -->
+      <div v-if="totalsData" class="card border-success mb-4">
+        <div class="card-header bg-success bg-opacity-10 text-success fw-bold d-flex justify-content-between align-items-center">
+          <span>🏦 Состояние счета: {{ totalsData.sys_acc_no || search.sys_acc_no }}</span>
+          <span class="badge bg-success">{{ totalsData.ccy || 'RUB' }} | Статус: {{ totalsData.acc_stat || 'N/A' }}</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-3 text-center">
+            <div v-for="(val, label) in totalsMapping" :key="label" class="col-md-2">
+              <div class="small text-muted">{{ label }}</div>
+              <div class="fs-5 fw-bold text-dark">{{ formatMoney(val) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Табы -->
+      <div v-if="search.sys_acc_no || blocks.length || movements.length || restrictions.length" class="card mb-3 border-0 bg-light rounded p-2">
+        <ul class="nav nav-tabs border-bottom-0">
+          <li class="nav-item" v-for="tab in tabConfig" :key="tab.key">
+            <button class="nav-link py-2 px-3 fw-semibold" 
+                    :class="{ active: activeTab === tab.key, 'bg-white border border-bottom-0 rounded-top': activeTab === tab.key }"
+                    @click="activeTab = tab.key">
+              {{ tab.label }} 
+              <span class="badge bg-secondary ms-1">{{ tab.items.length }}</span>
+            </button>
+          </li>
+        </ul>
+
+        <div class="card bg-white border rounded-top-0 p-3">
+          <!-- Контент таба (таблица) -->
+          <div v-for="tab in tabConfig" :key="tab.key" v-show="activeTab === tab.key">
+            <div v-if="tab.items.length" class="table-responsive">
+              <table class="table table-hover table-striped align-middle mb-0 small">
+                <thead class="table-light">
+                  <tr>
+                    <th v-for="col in tab.columns" :key="col.key" 
+                        class="cursor-pointer text-nowrap user-select-none" 
+                        @click="handleSort(tab.key, col.key)">
+                      {{ col.label }}
+                      <span v-if="tab.sortKey === col.key" class="ms-1 text-primary">
+                        {{ tab.sortDir === 'asc' ? '▲' : '▼' }}
+                      </span>
+                    </th>
+                  </tr>
+                  <tr>
+                    <td v-for="col in tab.columns" :key="'f-'+col.key" class="p-1">
+                      <input v-model="tab.filters[col.key]" type="text" class="form-control form-control-sm" placeholder="Фильтр...">
+                    </td>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in getPaginatedData(tab.key)" :key="row.id || Math.random()">
+                    <td v-for="col in tab.columns" :key="col.key + row.id">
+                      <span v-if="col.type === 'money'">{{ formatMoney(row[col.key]) }}</span>
+                      <span v-else-if="col.type === 'date'">{{ formatDate(row[col.key]) }}</span>
+                      <span v-else-if="col.type === 'status'">
+                        <span class="badge" :class="getStatusBadge(row[col.key])">{{ row[col.key] || '-' }}</span>
+                      </span>
+                      <span v-else>{{ row[col.key] || '-' }}</span>
+                    </td>
+                  </tr>
+                  <tr v-if="getFilteredData(tab.key).length === 0">
+                    <td :colspan="tab.columns.length" class="text-center text-muted py-3">Нет данных по фильтру</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Пагинация -->
+            <div v-if="getTotalPages(tab.key) > 1" class="d-flex justify-content-center align-items-center mt-3 gap-2">
+              <span class="text-muted small">Страница {{ tab.currentPage }} из {{ getTotalPages(tab.key) }}</span>
+              <nav>
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" :class="{ disabled: tab.currentPage === 1 }">
+                    <a class="page-link" href="#" @click.prevent="goToPage(tab.key, 1)">«</a>
+                  </li>
+                  <li class="page-item" :class="{ disabled: tab.currentPage === 1 }">
+                    <a class="page-link" href="#" @click.prevent="goToPage(tab.key, tab.currentPage - 1)">‹</a>
+                  </li>
+                  <li v-for="p in getDisplayedPages(tab.key)" :key="p" class="page-item" :class="{ active: p === tab.currentPage }">
+                    <a class="page-link" href="#" @click.prevent="goToPage(tab.key, p)">{{ p }}</a>
+                  </li>
+                  <li class="page-item" :class="{ disabled: tab.currentPage === getTotalPages(tab.key) }">
+                    <a class="page-link" href="#" @click.prevent="goToPage(tab.key, tab.currentPage + 1)">›</a>
+                  </li>
+                  <li class="page-item" :class="{ disabled: tab.currentPage === getTotalPages(tab.key) }">
+                    <a class="page-link" href="#" @click.prevent="goToPage(tab.key, getTotalPages(tab.key))">»</a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import axios from 'axios'
+import { useDataStore } from '../stores/dataStore'
+
+const store = useDataStore()
+const localLoading = ref(false)
+const activeTab = ref('blocks')
+
+// Параметры поиска
+const search = reactive({
+  sys_acc_no: '',
+  cb_account: '',
+  date_from: '',
+  date_to: '',
+  ext_system: '',
+  drcr: '',
+  amount_from: null,
+  amount_to: null
+})
+
+// Данные
+const totalsData = ref(null)
+const blocks = ref([])
+const movements = ref([])
+const restrictions = ref([])
+
+// Конфигурация табов
+const createTabState = (items) => reactive({
+  items,
+  filters: {},
+  sortKey: '',
+  sortDir: 'asc',
+  currentPage: 1,
+  perPage: 8
+})
+
+const blocksState = createTabState(blocks)
+const movementsState = createTabState(movements)
+const restrictionsState = createTabState(restrictions)
+
+const tabConfig = [
+  { 
+    key: 'blocks', label: '🔒 Блокировки', 
+    state: blocksState, 
+    columns: [
+      { key: 'block_id', label: 'ID блокировки' },
+      { key: 'amount', label: 'Сумма', type: 'money' },
+      { key: 'block_type', label: 'Тип' },
+      { key: 'block_status', label: 'Статус', type: 'status' },
+      { key: 'ext_system', label: 'Внеш. система' },
+      { key: 'movement_dt', label: 'Дата движения', type: 'date' },
+      { key: 'priority', label: 'Приоритет' },
+      { key: 'cbr_priority', label: 'Приоритет ЦБ' }
+    ]
+  },
+  { 
+    key: 'movements', label: '💳 Движения', 
+    state: movementsState, 
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'amount', label: 'Сумма', type: 'money' },
+      { key: 'dr_cr_ind', label: 'Д/К', type: 'status' },
+      { key: 'value_date', label: 'Дата валютир.', type: 'date' },
+      { key: 'txn_date', label: 'Дата транз.', type: 'date' },
+      { key: 'doc_num', label: 'Документ' },
+      { key: 'ext_system', label: 'Внеш. система' },
+      { key: 'cb_account', label: 'Счет ЦБ' }
+    ]
+  },
+  { 
+    key: 'restrictions', label: '⚠️ Ограничения', 
+    state: restrictionsState, 
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'amount', label: 'Сумма', type: 'money' },
+      { key: 'restr_type', label: 'Тип' },
+      { key: 'status', label: 'Статус', type: 'status' },
+      { key: 'initiator', label: 'Инициатор' },
+      { key: 'ext_system', label: 'Внеш. система' },
+      { key: 'start_date', label: 'Начало', type: 'date' },
+      { key: 'expiry_date', label: 'Истекает', type: 'date' },
+      { key: 'exec_proc_number', label: 'Исп. производство' }
+    ]
+  }
+]
+
+// Маппинг полей для отображения totals
+const totalsMapping = computed(() => ({
+  'Откр. остаток': totalsData.value?.open_bal,
+  'Закр. остаток': totalsData.value?.close_bal,
+  'Доступно': totalsData.value?.avail_cur_bal,
+  'Овердрафт': totalsData.value?.cur_unutil_ovd,
+  'Конф. блокировки': totalsData.value?.total_confbl,
+  'Неконф. блокировки': totalsData.value?.total_unconfbl,
+  'Налоги': totalsData.value?.total_tax,
+  'Судебные': totalsData.value?.total_bailiffs,
+  'Кр. оборот': totalsData.value?.cr_turn,
+  'Дб. оборот': totalsData.value?.dr_turn
+}))
+
+// Восстановление данных при загрузке страницы
+onMounted(() => {
+  if (store.searchMeta.accStatusSearch) {
+    Object.assign(search, store.searchMeta.accStatusSearch)
+    const cacheKey = `acc_status:${JSON.stringify(search)}`
+    const cached = store.cache[cacheKey]
+    if (cached) {
+      totalsData.value = cached.totals
+      blocks.value = cached.blocks
+      movements.value = cached.movements
+      restrictions.value = cached.restrictions
+    }
+  }
+})
+
+// Сброс формы
+const resetSearch = () => {
+  Object.assign(search, { sys_acc_no: '', cb_account: '', date_from: '', date_to: '', ext_system: '', drcr: '', amount_from: null, amount_to: null })
+  totalsData.value = null; blocks.value = []; movements.value = []; restrictions.value = []
+}
+
+// Основной поиск
+const handleSearch = async () => {
+  if (!search.sys_acc_no) return
+  localLoading.value = true
+  
+  try {
+    const cacheKey = `acc_status:${JSON.stringify(search)}`
+    const cached = store.cache[cacheKey]
+    
+    if (cached) {
+      totalsData.value = cached.totals
+      blocks.value = cached.blocks
+      movements.value = cached.movements
+      restrictions.value = cached.restrictions
+    } else {
+      // Параллельные запросы к 4 API
+      const [resTotals, resBlocks, resMovements, resRestrictions] = await Promise.allSettled([
+        axios.post('/api/call', { method: 'casaproc_api.get_acc_totals', params: { p_sys_acc_no: search.sys_acc_no, p_from_date: search.date_from || null, p_to_date: search.date_to || null } }),
+        axios.post('/api/call', { method: 'casaproc_api.get_blocks', params: { sys_acc_no: search.sys_acc_no, from_date: search.date_from, to_date: search.date_to, from_amount: search.amount_from, to_amount: search.amount_to, ext_system: search.ext_system } }),
+        axios.post('/api/call', { method: 'casaproc_api.get_movements', params: { sys_acc_no: search.sys_acc_no, from_date: search.date_from, to_date: search.date_to, amt_from: search.amount_from, amt_to: search.amount_to, drcr: search.drcr, ext_system: search.ext_system } }),
+        axios.post('/api/call', { method: 'casaproc_api.get_restrictions', params: { sysacc: search.sys_acc_no, start_date_from: search.date_from, start_date_to: search.date_to, closure_date_from: search.date_from, closure_date_to: search.date_to, restr_amt: search.amount_from || search.amount_to, ext_system: search.ext_system } })
+      ])
+
+      // Обработка результатов
+      totalsData.value = resTotals.status === 'fulfilled' && resTotals.value.data.data ? resTotals.value.data.data : {}
+      blocks.value = resBlocks.status === 'fulfilled' && resBlocks.value.data.data ? resBlocks.value.data.data : []
+      movements.value = resMovements.status === 'fulfilled' && resMovements.value.data.data ? resMovements.value.data.data : []
+      restrictions.value = resRestrictions.status === 'fulfilled' && resRestrictions.value.data.data ? resRestrictions.value.data.data : []
+
+      // Сохраняем в кэш и мета-данные
+      store.cache[cacheKey] = { totals: totalsData.value, blocks: blocks.value, movements: movements.value, restrictions: restrictions.value }
+      store.searchMeta.accStatusSearch = { ...search }
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки:', err)
+  } finally {
+    localLoading.value = false
+    // Сброс пагинации при новом поиске
+    tabConfig.forEach(t => t.state.currentPage = 1)
+  }
+}
+
+// Фильтрация
+const getFilteredData = (tabKey) => {
+  const tab = tabConfig.find(t => t.key === tabKey)
+  let data = [...tab.state.items]
+  
+  Object.entries(tab.state.filters).forEach(([key, val]) => {
+    if (val) {
+      const filter = String(val).toLowerCase()
+      data = data.filter(row => String(row[key] ?? '').toLowerCase().includes(filter))
+    }
+  })
+  
+  // Сортировка
+  if (tab.state.sortKey) {
+    data.sort((a, b) => {
+      const vA = a[tab.state.sortKey] ?? ''
+      const vB = b[tab.state.sortKey] ?? ''
+      if (typeof vA === 'number' && typeof vB === 'number') {
+        return tab.state.sortDir === 'asc' ? vA - vB : vB - vA
+      }
+      return tab.state.sortDir === 'asc' ? String(vA).localeCompare(String(vB), 'ru') : String(vB).localeCompare(String(vA), 'ru')
+    })
+  }
+  return data
+}
+
+// Пагинация
+const getPaginatedData = (tabKey) => {
+  const tab = tabConfig.find(t => t.key === tabKey)
+  const filtered = getFilteredData(tabKey)
+  const start = (tab.state.currentPage - 1) * tab.state.perPage
+  return filtered.slice(start, start + tab.state.perPage)
+}
+
+const getTotalPages = (tabKey) => Math.ceil(getFilteredData(tabKey).length / tabConfig.find(t => t.key === tabKey).state.perPage)
+const getDisplayedPages = (tabKey) => {
+  const tab = tabConfig.find(t => t.key === tabKey)
+  const total = getTotalPages(tabKey)
+  const current = tab.state.currentPage
+  if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1)
+  let start = Math.max(1, current - 2)
+  let end = Math.min(total, current + 2)
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
+const goToPage = (tabKey, page) => {
+  const tab = tabConfig.find(t => t.key === tabKey)
+  if (page >= 1 && page <= getTotalPages(tabKey)) tab.state.currentPage = page
+}
+
+// Обработчики
+const handleSort = (tabKey, key) => {
+  const tab = tabConfig.find(t => t.key === tabKey)
+  if (tab.state.sortKey === key) tab.state.sortDir = tab.state.sortDir === 'asc' ? 'desc' : 'asc'
+  else { tab.state.sortKey = key; tab.state.sortDir = 'asc' }
+}
+
+const resetPage = () => tabConfig.forEach(t => t.state.currentPage = 1)
+watch(() => tabConfig.map(t => JSON.stringify(t.state.filters)), resetPage)
+
+// Форматтеры
+const formatMoney = (v) => v != null ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(v) : '-'
+const formatDate = (v) => v ? new Date(v).toLocaleDateString('ru-RU') : '-'
+const getStatusBadge = (v) => {
+  if (v === '0' || v === 'A' || v === 'C') return 'bg-success'
+  if (v === '1' || v === 'I') return 'bg-warning text-dark'
+  if (v === 'D') return 'bg-danger'
+  return 'bg-secondary'
+}
+</script>
+
+<style scoped>
+.user-select-none { user-select: none; }
+.cursor-pointer { cursor: pointer; }
+.nav-link.active { font-weight: 600; color: #0d6efd !important; border-color: #dee2e6 #dee2e6 #fff !important; }
+</style>
+```
+
+
+## Ключевые особенности:
+1. Сохранение данных между переходами: Используется store.cache и store.searchMeta. При возврате на страницу данные восстанавливаются мгновенно без повторных запросов к API.
+2. Параллельная загрузка: 4 API вызываются одновременно через Promise.allSettled. Ошибка в одном из них не блокирует остальные.
+3. Умная фильтрация и сортировка: Каждый таб имеет независимые фильтры по столбцам. Сортировка работает по клику на заголовок. При изменении фильтров пагинация автоматически сбрасывается на 1 страницу.
+4. Динамические табы и таблицы: Конфигурация столбцов вынесена в массив tabConfig, что позволяет легко добавлять новые вкладки или менять поля без дублирования кода.
+5. Адаптивный Bootstrap UI: Форма поиска компактна, таблица оборачивается в table-responsive, бейджи статусов подсвечиваются автоматически.
+6. Форматирование: Даты, суммы и статусы приводятся к читаемому виду согласно банковской логике.
+
+Добавьте маршрут в router/index.js и компонент готов к работе. Если потребуется маппинг дополнительных полей из ответа API или интеграция с экспортом в Excel, напишите.
