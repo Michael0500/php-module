@@ -623,7 +623,7 @@ const isLoading = computed(() => store.loading)
 
 Вот обновленный код файла `frontend/vue-src/src/views/AccountsView.vue`. В него добавлена логика пагинации (разбиение по страницам), контролы навигации и обработчики для корректного переключения страниц при фильтрации.
 
-
+```vuejs
 <template>
   <div class="card shadow-sm border-0">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
@@ -917,3 +917,4 @@ const isLoading = computed(() => store.loading)
 .cursor-pointer { cursor: pointer; }
 .font-monospace { font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace; font-size: 0.9rem; }
 </style>
+```
