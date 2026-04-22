@@ -1721,3 +1721,91 @@ const getStatusBadge = (v) => {
 .nav-link.active { font-weight: 600; color: #0d6efd !important; border-color: #dee2e6 #dee2e6 #fff !important; }
 </style>
 ```
+
+
+## Добавление возможности выгрузить результаты в Excel
+
+Для реализации выгрузки отфильтрованных и отсортированных данных в Excel на стороне клиента (без повторных запросов к API) используйте библиотеку `xlsx` (SheetJS).
+
+### 1. Установка зависимости
+
+```bash
+cd frontend/vue-src
+npm install xlsx
+```
+
+### 2. Изменения в `frontend/vue-src/src/views/AccountsView.vue`
+
+```vue
+      <!-- ... конец формы поиска ... -->
+      </form>
+
+      <!-- 🔽 НОВАЯ ПАНЕЛЬ ЭКСПОРТА -->
+      <div v-if="accounts.length" class="d-flex justify-content-between align-items-center mb-3">
+        <span class="text-muted small">Показано: {{ filteredSortedAccounts.length }} из {{ accounts.length }}</span>
+        <button type="button" class="btn btn-success btn-sm d-flex align-items-center gap-1" 
+                @click="exportToExcel" 
+                :disabled="filteredSortedAccounts.length === 0">
+          📥 Экспорт в Excel
+        </button>
+      </div>
+      <!-- 🔼 КОНЕЦ ПАНЕЛИ -->
+
+      <!-- Таблица результатов -->
+      <div v-if="accounts.length" class="table-responsive rounded border">
+      <!-- ... остальной код таблицы ... -->
+```
+
+### `<script setup>` (добавьте импорт и функцию экспорта)
+
+```js
+// В начале файла добавьте импорт
+import * as XLSX from 'xlsx'
+
+// ... существующий код ...
+
+// 🔽 НОВАЯ ФУНКЦИЯ ЭКСПОРТА
+const exportToExcel = () => {
+  if (filteredSortedAccounts.value.length === 0) return
+
+  // Преобразуем отфильтрованные/отсортированные данные в плоский формат
+  const exportData = filteredSortedAccounts.value.map(row => ({
+    'Филиал': row.branch || '-',
+    'Системный №': row.sysacc || '-',
+    'Счет клиента': row.account || '-',
+    'Статус': row.acc_stat || '-',
+    'Дата открытия': formatDate(row.open_date),
+    'Дата закрытия': formatDate(row.close_date),
+    'Остаток': row.current_bal != null ? Number(row.current_bal) : 0
+  }))
+
+  // Создаем лист и книгу
+  const ws = XLSX.utils.json_to_sheet(exportData)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Счета')
+
+  // Автоширина колонок (опционально, для удобства)
+  const colWidths = [
+    { wch: 10 }, // Филиал
+    { wch: 22 }, // Системный №
+    { wch: 20 }, // Счет клиента
+    { wch: 10 }, // Статус
+    { wch: 12 }, // Дата открытия
+    { wch: 12 }, // Дата закрытия
+    { wch: 16 }  // Остаток
+  ]
+  ws['!cols'] = colWidths
+
+  // Генерация имени файла и скачивание
+  const fileName = `Счета_Клиент${customerNo.value}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  XLSX.writeFile(wb, fileName)
+}
+```
+
+### Как это работает:
+1. Без запросов к API: Функция берет данные напрямую из реактивного `filteredSortedAccounts`, который уже содержит результат клиентской фильтрации и сортировки.
+2. Числовой формат в Excel: Остаток передается как Number, чтобы в Excel с ним можно было работать формулами (суммы, фильтры, графики). Даты передаются строками в DD.MM.YYYY.
+3. Мгновенная генерация: `xlsx` работает полностью в браузере, файл формируется и скачивается за миллисекунды даже при 10k+ строк.
+4. Безопасность: Кнопка автоматически блокируется (:disabled), если отфильтрованный список пуст.
+
+Файл готов к использованию. Если потребуется выгрузка других таблиц (блокировки, движения, ограничения) по аналогии, просто скопируйте функцию `exportToExcel`, изменив маппинг полей под конкретную таблицу.
