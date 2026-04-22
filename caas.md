@@ -1808,4 +1808,41 @@ const exportToExcel = () => {
 3. Мгновенная генерация: `xlsx` работает полностью в браузере, файл формируется и скачивается за миллисекунды даже при 10k+ строк.
 4. Безопасность: Кнопка автоматически блокируется (:disabled), если отфильтрованный список пуст.
 
-Файл готов к использованию. Если потребуется выгрузка других таблиц (блокировки, движения, ограничения) по аналогии, просто скопируйте функцию `exportToExcel`, изменив маппинг полей под конкретную таблицу.
+## Выгрузка в Excel для блокировок, движений и ограничений
+
+```js
+import * as XLSX from 'xlsx'
+
+// ... существующий код ...
+
+// 🔽 ФУНКЦИЯ ЭКСПОРТА ТАБА В EXCEL
+const exportTabToExcel = (tab) => {
+  const data = getFilteredData(tab)
+  if (!data.length) return
+
+  // Преобразуем данные в плоский формат с русскими заголовками
+  const exportRows = data.map(row => {
+    const obj = {}
+    tab.columns.forEach(col => {
+      let val = row[col.key]
+      if (col.type === 'money') obj[col.label] = val != null ? Number(val) : 0
+      else if (col.type === 'date') obj[col.label] = val ? formatDate(val) : '-'
+      else obj[col.label] = val || '-'
+    })
+    return obj
+  })
+
+  // Создаем книгу и лист
+  const ws = XLSX.utils.json_to_sheet(exportRows)
+  const wb = XLSX.utils.book_new()
+  const sheetName = tab.label.replace(/[^\w\sа-яА-ЯёЁ]/g, '').trim()
+  XLSX.utils.book_append_sheet(wb, ws, sheetName)
+
+  // Автоширина колонок
+  ws['!cols'] = tab.columns.map(col => ({ wch: Math.max(col.label.length + 2, 12) }))
+
+  // Формируем имя файла и скачиваем
+  const fileName = `${sheetName}_${search.sys_acc_no}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  XLSX.writeFile(wb, fileName)
+}
+```
