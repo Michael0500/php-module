@@ -1846,3 +1846,346 @@ const exportTabToExcel = (tab) => {
   XLSX.writeFile(wb, fileName)
 }
 ```
+
+
+## 1. frontend/config/main.php
+
+Настройте время жизни сессии и компонент пользователя:
+
+```php
+'components' => [
+    'session' => [
+        'timeout' => 1800, // 30 минут в секундах
+        'cookieParams' => [
+            'httponly' => true,
+            'samesite' => 'Lax',
+            'secure' => YII_ENV_PROD, // true для HTTPS
+        ],
+    ],
+    'user' => [
+        'identityClass' => 'common\models\User', // Укажите вашу модель пользователя
+        'enableAutoLogin' => true,
+        'loginUrl' => ['/login'], // Для не-API запросов
+    ],
+    // ... остальные компоненты
+],
+```
+
+## 2. frontend/controllers/AuthController.php
+
+```php
+<?php
+namespace frontend\controllers;
+
+use Yii;
+use yii\web\Controller;
+use yii\web\Response;
+// use common\models\LoginForm; // Замените на вашу форму логина
+
+class AuthController extends Controller
+{
+    public function beforeAction($action) {
+        $this->enableCsrfValidation = false;
+        return parent::beforeAction($action);
+    }
+
+    public function actionLogin() {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        $request = Yii::$app->request;
+        if (!$request->isPost) return ['success' => false, 'message' => 'POST only'];
+
+        // Адаптируйте под вашу модель авторизации
+        $username = $request->post('username');
+        $password = $request->post('password');
+        
+        $user = Yii::$app->user;
+        if ($user->login(Yii::$app->user->identity->findByUsername($username), 0)) {
+            return ['success' => true, 'user' => $user->identity->username];
+        }
+        return ['success' => false, 'message' => 'Неверный логин или пароль'];
+    }
+
+    public function actionLogout() {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        Yii::$app->user->logout();
+        return ['success' => true];
+    }
+
+    public function actionCheck() {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        return [
+            'authenticated' => !Yii::$app->user->isGuest,
+            'user' => Yii::$app->user->isGuest ? null : Yii::$app->user->identity->username
+        ];
+    }
+}
+```
+
+Добавьте правило в urlManager: `'auth/<action>' => 'auth/<action>'`
+
+## 3. frontend/vue-src/src/stores/authStore.js
+
+```js
+import { defineStore } from 'pinia'
+import axios from 'axios'
+import router from '../router'
+
+export const useAuthStore = defineStore('auth', {
+  state: () => ({
+    user: null,
+    isAuthenticated: false,
+    lastActivity: Date.now()
+  }),
+  getters: {
+    isSessionExpired: (state) => {
+      const IDLE_TIMEOUT = 30 * 60 * 1000 // 30 мин
+      return Date.now() - state.lastActivity > IDLE_TIMEOUT
+    }
+  },
+  actions: {
+    async login(username, password) {
+      const { data } = await axios.post('/api/auth/login', { username, password })
+      if (data.success) {
+        this.user = data.user
+        this.isAuthenticated = true
+        this.resetIdleTimer()
+        router.push('/')
+        return true
+      }
+      throw new Error(data.message || 'Ошибка авторизации')
+    },
+    async logout() {
+      try { await axios.post('/api/auth/logout') } catch {}
+      this.user = null
+      this.isAuthenticated = false
+      this.lastActivity = 0
+      router.push('/login')
+    },
+    resetIdleTimer() {
+      this.lastActivity = Date.now()
+    },
+    async checkAuth() {
+      if (this.isAuthenticated) return true
+      try {
+        const { data } = await axios.get('/api/auth/check')
+        if (data.authenticated) {
+          this.isAuthenticated = true
+          this.user = data.user
+          this.resetIdleTimer()
+          return true
+        }
+      } catch {}
+      return false
+    }
+  }
+})
+```
+
+## 4. frontend/vue-src/src/composables/useIdleTimer.js
+
+Отслеживает активность пользователя и инициирует выход при простое 30 мин:
+
+```js
+import { onMounted, onUnmounted } from 'vue'
+import { useAuthStore } from '../stores/authStore'
+
+export function useIdleTimer() {
+  const authStore = useAuthStore()
+  let timer = null
+
+  const startCheck = () => {
+    timer = setInterval(() => {
+      if (authStore.isAuthenticated && authStore.isSessionExpired) {
+        authStore.logout()
+        alert('⏱️ Сессия завершена из-за неактивности. Пожалуйста, войдите снова.')
+      }
+    }, 10000) // Проверка каждые 10 сек
+  }
+
+  const handleActivity = () => {
+    if (authStore.isAuthenticated) authStore.resetIdleTimer()
+  }
+
+  onMounted(() => {
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt => 
+      window.addEventListener(evt, handleActivity)
+    )
+    startCheck()
+  })
+
+  onUnmounted(() => {
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt => 
+      window.removeEventListener(evt, handleActivity)
+    )
+    if (timer) clearInterval(timer)
+  })
+}
+```
+
+
+## 5. frontend/vue-src/src/router/index.js (Guard)
+
+```js
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/authStore'
+// ... ваши импорты роутов
+
+const router = createRouter({
+  history: createWebHistory('/'),
+  routes: [
+    { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
+    // ... остальные роуты
+  ]
+})
+
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore()
+  
+  if (to.name === 'login') {
+    if (authStore.isAuthenticated) return next('/')
+    return next()
+  }
+
+  if (!authStore.isAuthenticated) {
+    const isValid = await authStore.checkAuth()
+    if (!isValid) return next('/login')
+  }
+  next()
+})
+
+export default router
+```
+
+## 6. frontend/vue-src/src/main.js (Interceptor)
+
+```js
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import router from './router'
+import App from './App.vue'
+import axios from 'axios'
+import { useAuthStore } from './stores/authStore'
+import 'bootstrap/dist/css/bootstrap.min.css'
+
+// Глобальный обработчик 401/403
+axios.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      const authStore = useAuthStore()
+      authStore.logout()
+    }
+    return Promise.reject(err)
+  }
+)
+
+const app = createApp(App)
+app.use(createPinia())
+app.use(router)
+app.mount('#app')
+```
+
+## 7. frontend/vue-src/src/App.vue
+
+```vue
+<template>
+  <!-- Страница логина -->
+  <router-view v-if="!authStore.isAuthenticated" />
+
+  <!-- Основное приложение -->
+  <div v-else class="app-layout">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+      <div class="container">
+        <router-link class="navbar-brand fw-bold" to="/">🏦 Учет Счетов</router-link>
+        <div class="navbar-nav ms-auto">
+          <router-link class="nav-link" to="/accounts" active-class="active text-white fw-bold">Счета</router-link>
+          <router-link class="nav-link" to="/status" active-class="active text-white fw-bold">Статус</router-link>
+          <button class="btn btn-outline-light btn-sm ms-3" @click="authStore.logout">🚪 Выйти</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="container py-4">
+      <AppLoader />
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
+  </div>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { useAuthStore } from './stores/authStore'
+import { useIdleTimer } from './composables/useIdleTimer'
+import AppLoader from './components/AppLoader.vue'
+
+const authStore = useAuthStore()
+useIdleTimer() // Активируем таймер неактивности глобально
+</script>
+
+<style>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+body { background-color: #f8f9fa; }
+</style>
+```
+
+## 8. frontend/vue-src/src/views/LoginView.vue
+
+```vue
+<template>
+  <div class="d-flex justify-content-center align-items-center vh-100 bg-light">
+    <div class="card shadow-sm" style="width: 380px;">
+      <div class="card-body p-4">
+        <h4 class="card-title text-center mb-4">🔐 Авторизация</h4>
+        <form @submit.prevent="handleLogin">
+          <div class="mb-3">
+            <label class="form-label">Логин</label>
+            <input v-model="username" type="text" class="form-control" required autofocus>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Пароль</label>
+            <input v-model="password" type="password" class="form-control" required>
+          </div>
+          <div v-if="error" class="alert alert-danger py-2 small">{{ error }}</div>
+          <button type="submit" class="btn btn-primary w-100" :disabled="loading">
+            <span v-if="loading" class="spinner-border spinner-border-sm me-1"></span>
+            {{ loading ? 'Вход...' : 'Войти' }}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { useAuthStore } from '../stores/authStore'
+
+const authStore = useAuthStore()
+const username = ref('')
+const password = ref('')
+const error = ref('')
+const loading = ref(false)
+
+const handleLogin = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    await authStore.login(username.value, password.value)
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+```
+
+1. Защита роутов: `router.beforeEach` проверяет authStore. Если не авторизован → редирект на /login.
+1. Таймаут 30 мин: useIdleTimer слушает события мыши/клавиатуры. Если активность отсутствует 30 мин → вызывается logout(), сессия Yii2 уничтожается, пользователь перенаправляется на логин.
+1. Синхронизация с бэкендом: При каждом действии пользователя обновляется `lastActivity`. PHP-сессия автоматически обновляется при каждом запросе к API. Axios-интерцептор ловит 401 и принудительно разлогинивает клиента.
+1. Безопасность: Сессия хранится в HttpOnly куке (не доступна JS), защита от CSRF для API отключена в AuthController (если требуется, можно включить и передавать токен в заголовке).
